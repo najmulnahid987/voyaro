@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 
 /**
  * Onboarding sub-group layout (nested inside auth group).
- * Wraps: travel-style, interests, preferences.
+ * Wraps: travel-style, interests, preferences, ready.
  */
 export default function OnboardingLayout() {
   return (
@@ -10,6 +10,7 @@ export default function OnboardingLayout() {
       <Stack.Screen name="travel-style" />
       <Stack.Screen name="interests" />
       <Stack.Screen name="preferences" />
+      <Stack.Screen name="ready" />
     </Stack>
   );
 }

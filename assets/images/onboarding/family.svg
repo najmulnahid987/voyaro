@@ -1,0 +1,11 @@
+<svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+  <!-- Parent Left -->
+  <circle cx="6" cy="5" r="2.5"/>
+  <path d="M2.5 19v-4a3.5 3.5 0 0 1 7 0v4"/>
+  <!-- Parent Right -->
+  <circle cx="18" cy="5" r="2.5"/>
+  <path d="M14.5 19v-4a3.5 3.5 0 0 1 7 0v4"/>
+  <!-- Child Center -->
+  <circle cx="12" cy="10" r="2"/>
+  <path d="M9.5 20v-3a2.5 2.5 0 0 1 5 0v3"/>
+</svg>

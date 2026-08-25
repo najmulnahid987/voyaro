@@ -7,7 +7,7 @@
  * 3. Provide a back button.
  * 4. Accept optional nav links for testing forward navigation.
  *
- * Remove / replace with real screens in Phase 3+.
+ * Safe-area handled for all routes.
  */
 import React from 'react';
 import {
@@ -18,11 +18,13 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography, radius } from '@/theme';
 
 interface NavLink {
   label: string;
-  href: string;
+  href?: string;
+  onPress?: () => void;
   replace?: boolean;
 }
 
@@ -34,52 +36,65 @@ interface PlaceholderScreenProps {
 
 export function PlaceholderScreen({ route, title, links = [] }: PlaceholderScreenProps) {
   return (
-    <ScrollView
-      style={s.scroll}
-      contentContainerStyle={s.container}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Back */}
-      {router.canGoBack() && (
-        <Pressable onPress={() => router.back()} style={s.back}>
-          <Text style={s.backText}>← Back</Text>
-        </Pressable>
-      )}
+    <SafeAreaView style={s.safeArea} edges={['top', 'bottom']}>
+      <ScrollView
+        style={s.scroll}
+        contentContainerStyle={s.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Back */}
+        {router.canGoBack() && (
+          <Pressable onPress={() => router.back()} style={s.back}>
+            <Text style={s.backText}>← Back</Text>
+          </Pressable>
+        )}
 
-      {/* Route badge */}
-      <View style={s.badge}>
-        <Text style={s.badgeText}>{route}</Text>
-      </View>
-
-      {/* Title */}
-      <Text style={s.title}>{title ?? route.split('/').pop() ?? 'Screen'}</Text>
-      <Text style={s.caption}>Phase 2 placeholder — replace in Phase 3</Text>
-
-      {/* Nav links */}
-      {links.length > 0 && (
-        <View style={s.links}>
-          <Text style={s.linksHeader}>Navigate to:</Text>
-          {links.map((link) => (
-            <Pressable
-              key={link.href}
-              style={s.linkBtn}
-              onPress={() =>
-                link.replace
-                  ? router.replace(link.href as any)
-                  : router.push(link.href as any)
-              }
-            >
-              <Text style={s.linkText}>→ {link.label}</Text>
-            </Pressable>
-          ))}
+        {/* Route badge */}
+        <View style={s.badge}>
+          <Text style={s.badgeText}>{route}</Text>
         </View>
-      )}
-    </ScrollView>
+
+        {/* Title */}
+        <Text style={s.title}>{title ?? route.split('/').pop() ?? 'Screen'}</Text>
+        <Text style={s.caption}>Phase 2 placeholder — replace in Phase 3/4</Text>
+
+        {/* Nav links */}
+        {links.length > 0 && (
+          <View style={s.links}>
+            <Text style={s.linksHeader}>Navigate to:</Text>
+            {links.map((link, idx) => (
+              <Pressable
+                key={link.href || `link-${idx}`}
+                style={s.linkBtn}
+                onPress={() => {
+                  if (link.onPress) {
+                    link.onPress();
+                  } else if (link.href) {
+                    link.replace
+                      ? router.replace(link.href as any)
+                      : router.push(link.href as any);
+                  }
+                }}
+              >
+                <Text style={s.linkText}>→ {link.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: colors.background },
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  scroll: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
   container: {
     flexGrow: 1,
     alignItems: 'center',

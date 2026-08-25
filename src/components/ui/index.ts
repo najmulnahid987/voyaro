@@ -4,7 +4,7 @@
  * Single import point for all reusable UI primitives.
  *
  * Usage:
- *   import { Button, Card, Avatar } from '@/components/ui';
+ *   import { Button, Card, Avatar, OnboardingHeader } from '@/components/ui';
  */
 
 export { Button } from './Button';
@@ -42,3 +42,6 @@ export type { DividerProps } from './Divider';
 
 export { SectionHeader } from './SectionHeader';
 export type { SectionHeaderProps } from './SectionHeader';
+
+export { OnboardingHeader } from './OnboardingHeader';
+export type { OnboardingHeaderProps } from './OnboardingHeader';
