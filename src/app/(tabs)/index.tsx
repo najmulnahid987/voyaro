@@ -1,17 +1,15 @@
-import React from 'react';
+import { useShellInsets } from '@/components/navigation';
+import { getHomeDashboardData, Trip } from '@/services/mockData';
+import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View,
+  View
 } from 'react-native';
-import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { getHomeDashboardData, Trip } from '@/services/mockData';
 
 /**
  * Route: /(tabs)/ — Home Screen (Phase 4)
@@ -25,6 +23,7 @@ import { getHomeDashboardData, Trip } from '@/services/mockData';
  *   5. What should I do next?
  */
 export default function HomeScreen() {
+  const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
   const data = getHomeDashboardData();
   const { currentTrip, comingUpEvents, pastTrips } = data;
 
@@ -48,61 +47,14 @@ export default function HomeScreen() {
     router.push('/ai');
   };
 
-  const handleProfilePress = () => {
-    router.push('/(tabs)/profile');
-  };
-
-  const handleSearchPress = () => {
-    router.push('/(tabs)/trips');
-  };
-
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      {/* Floating Header Bar */}
-      <View style={styles.headerWrapper}>
-        <View style={styles.headerBar}>
-          {/* Profile Icon / Avatar */}
-          <Pressable
-            onPress={handleProfilePress}
-            style={({ pressed }) => [
-              styles.avatarButton,
-              pressed && styles.buttonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Profile"
-          >
-            <Image
-              source={require('@/assets/images/onboarding/person.svg')}
-              style={styles.avatarIcon}
-              contentFit="contain"
-            />
-          </Pressable>
-
-          {/* Voyaro Brand Title */}
-          <Text style={styles.headerTitle}>Voyaro</Text>
-
-          {/* Search Trigger */}
-          <Pressable
-            onPress={handleSearchPress}
-            style={({ pressed }) => [
-              styles.searchButton,
-              pressed && styles.buttonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Search trips"
-          >
-            <Image
-              source={require('@/assets/images/icons/search.svg')}
-              style={styles.searchIcon}
-              contentFit="contain"
-            />
-          </Pressable>
-        </View>
-      </View>
-
+    <View style={styles.safeArea}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: contentPaddingTop, paddingBottom: contentPaddingBottom },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
@@ -191,7 +143,7 @@ export default function HomeScreen() {
                 <View
                   style={[
                     styles.progressFill,
-                    { width: `${currentTrip.spending.percentUsed}%` },
+                    { width: `${currentTrip.spending.percentUsed ?? 0}%` as `${number}%` },
                   ]}
                 />
               </View>
@@ -313,7 +265,7 @@ export default function HomeScreen() {
 
           {/* ── 5. Past Trips Carousel ────────────────────────────────────────── */}
           <View style={styles.pastTripsSection}>
-            <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionHeaderRow, styles.pastTripsHeaderRow]}>
               <Text style={styles.sectionTitleUnderline}>Past Trips</Text>
               <Pressable
                 onPress={handleAllTripsPress}
@@ -352,8 +304,8 @@ export default function HomeScreen() {
                           trip.category === 'landscape'
                             ? require('@/assets/images/icons/landscape.svg')
                             : trip.category === 'beach'
-                            ? require('@/assets/images/onboarding/spa.svg')
-                            : require('@/assets/images/icons/flight.svg')
+                              ? require('@/assets/images/onboarding/spa.svg')
+                              : require('@/assets/images/icons/flight.svg')
                         }
                         style={styles.pastTripCategoryIcon}
                         contentFit="contain"
@@ -366,7 +318,7 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -385,58 +337,6 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 480,
     alignSelf: 'center',
-  },
-
-  // ── Header Bar ─────────────────────────────────────────────────────────────
-  headerWrapper: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
-  },
-  headerBar: {
-    height: 52,
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-    ...shadows.card,
-  },
-  avatarButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.backgroundAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarIcon: {
-    width: 18,
-    height: 18,
-    tintColor: colors.primary,
-  },
-  headerTitle: {
-    ...typography.screenTitle,
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '600',
-    color: colors.primary,
-    letterSpacing: -0.3,
-  },
-  searchButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchIcon: {
-    width: 22,
-    height: 22,
-    tintColor: colors.primary,
   },
 
   // ── Hero Card ──────────────────────────────────────────────────────────────
@@ -811,6 +711,9 @@ const styles = StyleSheet.create({
   // ── Past Trips Carousel ────────────────────────────────────────────────────
   pastTripsSection: {
     marginTop: spacing.xl,
+  },
+  pastTripsHeaderRow: {
+    paddingHorizontal: spacing.lg,
   },
   horizontalScrollContent: {
     paddingHorizontal: spacing.lg,
