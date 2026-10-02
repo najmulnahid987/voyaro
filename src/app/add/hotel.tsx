@@ -29,9 +29,10 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { addItem } from '@/services/itineraryStore';
-import { ConcreteItineraryItem } from '@/types/itinerary';
+import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { ConcreteItineraryItem, HotelMetadata } from '@/types/itinerary';
 import { formatItineraryDate } from '@/utils/itineraryDateUtils';
+import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 
 // ---------------------------------------------------------------------------
 // Helpers for Date & Time Formatting and Nights Calculation
@@ -50,38 +51,66 @@ function calculateNights(inDateStr: string, outDateStr: string): number {
   }
 }
 
-function formatTimeString(time24: string): string {
-  if (!time24) return '';
-  const parts = time24.split(':');
-  if (parts.length < 2) return time24;
-  let h = parseInt(parts[0], 10);
-  const m = parts[1];
-  if (isNaN(h)) return time24;
+function toDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function toTimeStr(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function fmt12h(d: Date): string {
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${m} ${ampm}`;
 }
 
 export default function AddHotelScreen() {
-  const { tripId } = useLocalSearchParams<{ tripId?: string }>();
+  const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
+
+  const existingItem = useMemo(() => {
+    return itemId ? getItem(itemId) : undefined;
+  }, [itemId]);
+
+  const isEditMode = Boolean(existingItem && existingItem.type === 'hotel');
+  const hotelMeta = isEditMode ? (existingItem?.metadata as HotelMetadata) : undefined;
 
   // -------------------------------------------------------------------------
   // Form State
   // -------------------------------------------------------------------------
-  const [hotelName, setHotelName] = useState('The Ritz-Carlton, Tokyo');
-  const [address, setAddress] = useState('Tokyo Midtown, 9-7-1 Akasaka, Minato-ku, Tokyo');
+  const [hotelName, setHotelName] = useState(
+    () => hotelMeta?.hotelName || existingItem?.title || (isEditMode ? '' : 'The Ritz-Carlton, Tokyo')
+  );
+  const [address, setAddress] = useState(
+    () => hotelMeta?.address || existingItem?.location || (isEditMode ? '' : 'Tokyo Midtown, 9-7-1 Akasaka, Minato-ku, Tokyo')
+  );
 
-  const [checkInDate, setCheckInDate] = useState('2028-03-11');
-  const [checkInTime, setCheckInTime] = useState('15:00');
-  const [checkOutDate, setCheckOutDate] = useState('2028-03-14');
-  const [checkOutTime, setCheckOutTime] = useState('11:00');
+  const [checkInObj, setCheckInObj] = useState<Date>(
+    () => (existingItem?.startDateTime ? new Date(existingItem.startDateTime) : new Date('2028-03-11T15:00:00.000Z'))
+  );
+  const [checkOutObj, setCheckOutObj] = useState<Date>(
+    () => (existingItem?.endDateTime ? new Date(existingItem.endDateTime) : new Date('2028-03-14T11:00:00.000Z'))
+  );
 
-  const [confirmationNumber, setConfirmationNumber] = useState('RC-TYO-8841');
-  const [room, setRoom] = useState('Club Deluxe King Room');
-  const [guestName, setGuestName] = useState('Alex & Sarah Johnson');
-  const [notes, setNotes] = useState('High floor requested with Mount Fuji view. Early check-in noted.');
+  const [confirmationNumber, setConfirmationNumber] = useState(
+    () => existingItem?.confirmationNumber || (isEditMode ? '' : 'RC-TYO-8841')
+  );
+  const [room, setRoom] = useState(
+    () => hotelMeta?.room || hotelMeta?.roomType || (isEditMode ? '' : 'Club Deluxe King Room')
+  );
+  const [guestName, setGuestName] = useState(
+    () => hotelMeta?.guestName || (isEditMode ? '' : 'Alex & Sarah Johnson')
+  );
+  const [notes, setNotes] = useState(
+    () => existingItem?.notes || (isEditMode ? '' : 'High floor requested with Mount Fuji view. Early check-in noted.')
+  );
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -100,23 +129,7 @@ export default function AddHotelScreen() {
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-
-    if (!hotelName.trim()) {
-      newErrors.hotelName = 'Hotel name is required.';
-    }
-    if (!checkInDate.trim()) {
-      newErrors.checkInDate = 'Check-in date is required.';
-    }
-    if (!checkInTime.trim()) {
-      newErrors.checkInTime = 'Check-in time is required.';
-    }
-    if (!checkOutDate.trim()) {
-      newErrors.checkOutDate = 'Check-out date is required.';
-    }
-    if (!checkOutTime.trim()) {
-      newErrors.checkOutTime = 'Check-out time is required.';
-    }
-
+    if (!hotelName.trim()) newErrors.hotelName = 'Hotel name is required.';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -127,37 +140,59 @@ export default function AddHotelScreen() {
 
     try {
       // 1. Construct ISO Date-Time strings
-      const startIso = `${checkInDate}T${checkInTime}:00.000Z`;
-      const endIso = `${checkOutDate}T${checkOutTime}:00.000Z`;
-      const nightsCount = calculateNights(checkInDate, checkOutDate);
+      const checkInDateStr = toDateStr(checkInObj);
+      const checkOutDateStr = toDateStr(checkOutObj);
+      const startIso = `${checkInDateStr}T${toTimeStr(checkInObj)}:00.000Z`;
+      const endIso = `${checkOutDateStr}T${toTimeStr(checkOutObj)}:00.000Z`;
+      const nightsCount = calculateNights(checkInDateStr, checkOutDateStr);
 
-      // 2. Build Typed Concrete Hotel Item
-      const newHotel: ConcreteItineraryItem = {
-        id: `itin-hotel-${Date.now()}`,
-        tripId: effectiveTripId,
-        type: 'hotel',
-        title: hotelName.trim(),
-        startDateTime: startIso,
-        endDateTime: endIso,
-        location: address.trim() || hotelName.trim(),
-        confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
-        notes: notes.trim() || undefined,
-        metadata: {
-          hotelName: hotelName.trim(),
-          address: address.trim(),
-          checkIn: formatTimeString(checkInTime) || checkInTime,
-          checkOut: formatTimeString(checkOutTime) || checkOutTime,
-          room: room.trim() || undefined,
-          guestName: guestName.trim() || undefined,
-          roomType: room.trim() || undefined,
-          nightsCount,
-        },
-      };
+      // 2. Add or Update in In-Memory Store
+      if (isEditMode && itemId) {
+        updateItem(itemId, {
+          title: hotelName.trim(),
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: address.trim() || hotelName.trim(),
+          confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
+          notes: notes.trim() || undefined,
+          metadata: {
+            ...hotelMeta,
+            hotelName: hotelName.trim(),
+            address: address.trim(),
+            checkIn: fmt12h(checkInObj),
+            checkOut: fmt12h(checkOutObj),
+            room: room.trim() || undefined,
+            guestName: guestName.trim() || undefined,
+            roomType: room.trim() || undefined,
+            nightsCount,
+          },
+        });
+      } else {
+        const newHotel: ConcreteItineraryItem = {
+          id: `itin-hotel-${Date.now()}`,
+          tripId: effectiveTripId,
+          type: 'hotel',
+          title: hotelName.trim(),
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: address.trim() || hotelName.trim(),
+          confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
+          notes: notes.trim() || undefined,
+          metadata: {
+            hotelName: hotelName.trim(),
+            address: address.trim(),
+            checkIn: fmt12h(checkInObj),
+            checkOut: fmt12h(checkOutObj),
+            room: room.trim() || undefined,
+            guestName: guestName.trim() || undefined,
+            roomType: room.trim() || undefined,
+            nightsCount,
+          },
+        };
+        addItem(newHotel);
+      }
 
-      // 3. Add to In-Memory Store (triggers reactive re-render on timeline)
-      addItem(newHotel);
-
-      // 4. Return to Itinerary Timeline
+      // 3. Return to previous screen
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -174,26 +209,24 @@ export default function AddHotelScreen() {
   // -------------------------------------------------------------------------
 
   const nightsCount = useMemo(() => {
-    return calculateNights(checkInDate, checkOutDate);
-  }, [checkInDate, checkOutDate]);
+    return calculateNights(toDateStr(checkInObj), toDateStr(checkOutObj));
+  }, [checkInObj, checkOutObj]);
 
   const previewCheckInDate = useMemo(() => {
-    if (!checkInDate) return 'Oct 15, 2024';
-    return formatItineraryDate(checkInDate, 'medium') || checkInDate;
-  }, [checkInDate]);
+    return formatItineraryDate(toDateStr(checkInObj), 'medium') || toDateStr(checkInObj);
+  }, [checkInObj]);
 
   const previewCheckInTime = useMemo(() => {
-    return formatTimeString(checkInTime) || '3:00 PM';
-  }, [checkInTime]);
+    return fmt12h(checkInObj);
+  }, [checkInObj]);
 
   const previewCheckOutDate = useMemo(() => {
-    if (!checkOutDate) return 'Oct 19, 2024';
-    return formatItineraryDate(checkOutDate, 'medium') || checkOutDate;
-  }, [checkOutDate]);
+    return formatItineraryDate(toDateStr(checkOutObj), 'medium') || toDateStr(checkOutObj);
+  }, [checkOutObj]);
 
   const previewCheckOutTime = useMemo(() => {
-    return formatTimeString(checkOutTime) || '11:00 AM';
-  }, [checkOutTime]);
+    return fmt12h(checkOutObj);
+  }, [checkOutObj]);
 
   return (
     <KeyboardAvoidingView
@@ -231,7 +264,12 @@ export default function AddHotelScreen() {
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <Image
+                source={require('@/assets/images/icons/close.svg')}
+                style={styles.closeButtonIcon}
+                tintColor={colors.textSecondary}
+                contentFit="contain"
+              />
             </Pressable>
           </View>
 
@@ -277,7 +315,14 @@ export default function AddHotelScreen() {
               <View style={[styles.fieldGroup, styles.fieldDivider]}>
                 <Text style={styles.inputLabel}>Address</Text>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.pinIcon}>📍</Text>
+                  <View style={styles.inputIconBox}>
+                    <Image
+                      source={require('@/assets/images/icons/location-pin.svg')}
+                      style={styles.inputIcon}
+                      tintColor={colors.textSecondary}
+                      contentFit="contain"
+                    />
+                  </View>
                   <TextInput
                     style={styles.textInput}
                     value={address}
@@ -299,91 +344,35 @@ export default function AddHotelScreen() {
                 {/* Check-in */}
                 <View style={styles.flexColumn}>
                   <Text style={styles.inputLabel}>Check-in *</Text>
-                  <View
-                    style={[
-                      styles.dateTimeBox,
-                      errors.checkInDate || errors.checkInTime ? styles.inputWrapperError : null,
-                    ]}
-                  >
-                    <View style={styles.dateTimeHeader}>
-                      <Text style={styles.calendarIcon}>📅</Text>
-                      <TextInput
-                        style={styles.dateTextInput}
-                        value={checkInDate}
-                        onChangeText={(t) => {
-                          setCheckInDate(t);
-                          if (errors.checkInDate) setErrors((prev) => ({ ...prev, checkInDate: '' }));
-                        }}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={colors.textMuted}
-                        maxLength={10}
-                      />
-                    </View>
-                    <View style={styles.timeRow}>
-                      <Text style={styles.clockIcon}>🕒</Text>
-                      <TextInput
-                        style={styles.timeTextInput}
-                        value={checkInTime}
-                        onChangeText={(t) => {
-                          setCheckInTime(t);
-                          if (errors.checkInTime) setErrors((prev) => ({ ...prev, checkInTime: '' }));
-                        }}
-                        placeholder="15:00"
-                        placeholderTextColor={colors.textMuted}
-                        maxLength={5}
-                      />
-                    </View>
+                  <DateTimePickerField
+                    mode="date"
+                    value={checkInObj}
+                    onChange={setCheckInObj}
+                  />
+                  <View style={{ marginTop: spacing.sm }}>
+                    <DateTimePickerField
+                      mode="time"
+                      value={checkInObj}
+                      onChange={setCheckInObj}
+                    />
                   </View>
-                  {errors.checkInDate ? (
-                    <Text style={styles.errorText}>{errors.checkInDate}</Text>
-                  ) : errors.checkInTime ? (
-                    <Text style={styles.errorText}>{errors.checkInTime}</Text>
-                  ) : null}
                 </View>
 
                 {/* Check-out */}
                 <View style={styles.flexColumn}>
                   <Text style={styles.inputLabel}>Check-out *</Text>
-                  <View
-                    style={[
-                      styles.dateTimeBox,
-                      errors.checkOutDate || errors.checkOutTime ? styles.inputWrapperError : null,
-                    ]}
-                  >
-                    <View style={styles.dateTimeHeader}>
-                      <Text style={styles.calendarIcon}>📅</Text>
-                      <TextInput
-                        style={styles.dateTextInput}
-                        value={checkOutDate}
-                        onChangeText={(t) => {
-                          setCheckOutDate(t);
-                          if (errors.checkOutDate) setErrors((prev) => ({ ...prev, checkOutDate: '' }));
-                        }}
-                        placeholder="YYYY-MM-DD"
-                        placeholderTextColor={colors.textMuted}
-                        maxLength={10}
-                      />
-                    </View>
-                    <View style={styles.timeRow}>
-                      <Text style={styles.clockIcon}>🕒</Text>
-                      <TextInput
-                        style={styles.timeTextInput}
-                        value={checkOutTime}
-                        onChangeText={(t) => {
-                          setCheckOutTime(t);
-                          if (errors.checkOutTime) setErrors((prev) => ({ ...prev, checkOutTime: '' }));
-                        }}
-                        placeholder="11:00"
-                        placeholderTextColor={colors.textMuted}
-                        maxLength={5}
-                      />
-                    </View>
+                  <DateTimePickerField
+                    mode="date"
+                    value={checkOutObj}
+                    onChange={setCheckOutObj}
+                  />
+                  <View style={{ marginTop: spacing.sm }}>
+                    <DateTimePickerField
+                      mode="time"
+                      value={checkOutObj}
+                      onChange={setCheckOutObj}
+                    />
                   </View>
-                  {errors.checkOutDate ? (
-                    <Text style={styles.errorText}>{errors.checkOutDate}</Text>
-                  ) : errors.checkOutTime ? (
-                    <Text style={styles.errorText}>{errors.checkOutTime}</Text>
-                  ) : null}
                 </View>
               </View>
             </View>
@@ -644,10 +633,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  closeButtonText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: '500',
+  closeButtonIcon: {
+    width: 14,
+    height: 14,
   },
   buttonPressed: {
     opacity: 0.85,
@@ -722,10 +710,6 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
   },
-  pinIcon: {
-    fontSize: 14,
-    marginRight: spacing.sm,
-  },
   textInput: {
     flex: 1,
     fontFamily: typography.body.fontFamily,
@@ -743,48 +727,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
 
-  // --- Date & Time Picker Boxes ---
-  dateTimeBox: {
-    backgroundColor: colors.backgroundAlt,
-    borderRadius: radius.input,
-    padding: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.transparent,
-  },
-  dateTimeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingBottom: spacing.xs,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  calendarIcon: {
-    fontSize: 14,
-    marginRight: spacing.xs,
-  },
-  dateTextInput: {
-    flex: 1,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    color: colors.textPrimary,
-    paddingVertical: 2,
-  },
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: spacing.xs,
-  },
-  clockIcon: {
-    fontSize: 13,
-    marginRight: spacing.xs,
-  },
-  timeTextInput: {
-    flex: 1,
-    fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    color: colors.textPrimary,
-    paddingVertical: 2,
-  },
 
   // --- Notes ---
   notesInput: {

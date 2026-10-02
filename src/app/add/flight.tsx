@@ -29,9 +29,10 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { addItem } from '@/services/itineraryStore';
+import { addItem, getItem, updateItem } from '@/services/itineraryStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ConcreteItineraryItem } from '@/types/itinerary';
+import { ConcreteItineraryItem, FlightMetadata } from '@/types/itinerary';
+import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 
 // ---------------------------------------------------------------------------
 // Mock Airport Lookup Helper
@@ -80,31 +81,54 @@ const CABIN_CLASSES = ['Economy', 'Premium', 'Business', 'First'] as const;
 type CabinClass = (typeof CABIN_CLASSES)[number];
 
 export default function AddFlightScreen() {
-  const { tripId } = useLocalSearchParams<{ tripId?: string }>();
+  const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
+
+  const existingItem = useMemo(() => {
+    return itemId ? getItem(itemId) : undefined;
+  }, [itemId]);
+
+  const isEditMode = Boolean(existingItem && existingItem.type === 'flight');
+  const flightMeta = isEditMode ? (existingItem?.metadata as FlightMetadata) : undefined;
 
   // -------------------------------------------------------------------------
   // Form State
   // -------------------------------------------------------------------------
-  const [airline, setAirline] = useState('Emirates');
-  const [flightNumber, setFlightNumber] = useState('EK585');
-  const [departureAirport, setDepartureAirport] = useState('Dhaka, Bangladesh');
-  const [departureCode, setDepartureCode] = useState('DAC');
-  const [arrivalAirport, setArrivalAirport] = useState('Tokyo, Japan');
-  const [arrivalCode, setArrivalCode] = useState('NRT');
+  const [airline, setAirline] = useState(() => flightMeta?.airline || 'Emirates');
+  const [flightNumber, setFlightNumber] = useState(() => flightMeta?.flightNumber || 'EK585');
+  const [departureAirport, setDepartureAirport] = useState(
+    () => flightMeta?.departureCity || flightMeta?.departureAirport || 'Dhaka, Bangladesh'
+  );
+  const [departureCode, setDepartureCode] = useState(() => flightMeta?.departureAirport || 'DAC');
+  const [arrivalAirport, setArrivalAirport] = useState(
+    () => flightMeta?.arrivalCity || flightMeta?.arrivalAirport || 'Tokyo, Japan'
+  );
+  const [arrivalCode, setArrivalCode] = useState(() => flightMeta?.arrivalAirport || 'NRT');
 
-  const [departureDate, setDepartureDate] = useState('2028-03-10');
-  const [departureTime, setDepartureTime] = useState('20:30');
-  const [arrivalDate, setArrivalDate] = useState('2028-03-11');
-  const [arrivalTime, setArrivalTime] = useState('11:15');
+  const [departureDateObj, setDepartureDateObj] = useState<Date>(
+    () => (existingItem?.startDateTime ? new Date(existingItem.startDateTime) : new Date('2028-03-10T20:30:00.000Z'))
+  );
+  const [arrivalDateObj, setArrivalDateObj] = useState<Date>(
+    () => (existingItem?.endDateTime ? new Date(existingItem.endDateTime) : new Date('2028-03-11T11:15:00.000Z'))
+  );
 
-  const [terminal, setTerminal] = useState('1');
-  const [gate, setGate] = useState('12');
-  const [seat, setSeat] = useState('14A');
-  const [cabinClass, setCabinClass] = useState<CabinClass>('Economy');
-  const [confirmationNumber, setConfirmationNumber] = useState('EK-982134');
-  const [notes, setNotes] = useState('Window seats requested. 23kg checked bag included.');
+  const [terminal, setTerminal] = useState(() => flightMeta?.terminal || (isEditMode ? '' : '1'));
+  const [gate, setGate] = useState(() => flightMeta?.gate || (isEditMode ? '' : '12'));
+  const [seat, setSeat] = useState(() => flightMeta?.seat || (isEditMode ? '' : '14A'));
+  const [cabinClass, setCabinClass] = useState<CabinClass>(() => {
+    if (flightMeta?.cabinClass) {
+      const cap = flightMeta.cabinClass.charAt(0).toUpperCase() + flightMeta.cabinClass.slice(1);
+      return cap as CabinClass;
+    }
+    return 'Economy';
+  });
+  const [confirmationNumber, setConfirmationNumber] = useState(
+    () => existingItem?.confirmationNumber || (isEditMode ? '' : 'EK-982134')
+  );
+  const [notes, setNotes] = useState(
+    () => existingItem?.notes || (isEditMode ? '' : 'Window seats requested. 23kg checked bag included.')
+  );
 
   const [isClassPickerOpen, setIsClassPickerOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -151,6 +175,24 @@ export default function AddFlightScreen() {
   // Validation & Submission
   // -------------------------------------------------------------------------
 
+  const toDateStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const toTimeStr = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
+  const fmt12h = (d: Date) => {
+    let h = d.getHours();
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${min} ${ampm}`;
+  };
+
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
 
@@ -158,10 +200,6 @@ export default function AddFlightScreen() {
     if (!flightNumber.trim()) newErrors.flightNumber = 'Flight number is required.';
     if (!departureAirport.trim()) newErrors.departureAirport = 'Departure airport is required.';
     if (!arrivalAirport.trim()) newErrors.arrivalAirport = 'Arrival airport is required.';
-    if (!departureDate.trim()) newErrors.departureDate = 'Departure date is required.';
-    if (!departureTime.trim()) newErrors.departureTime = 'Departure time is required.';
-    if (!arrivalDate.trim()) newErrors.arrivalDate = 'Arrival date is required.';
-    if (!arrivalTime.trim()) newErrors.arrivalTime = 'Arrival time is required.';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -173,38 +211,64 @@ export default function AddFlightScreen() {
 
     try {
       // 1. Construct ISO Date-Time strings
-      const startIso = `${departureDate}T${departureTime}:00.000Z`;
-      const endIso = `${arrivalDate}T${arrivalTime}:00.000Z`;
+      const depDateStr = toDateStr(departureDateObj);
+      const depTimeStr = toTimeStr(departureDateObj);
+      const arrDateStr = toDateStr(arrivalDateObj);
+      const arrTimeStr = toTimeStr(arrivalDateObj);
+      const startIso = `${depDateStr}T${depTimeStr}:00.000Z`;
+      const endIso = `${arrDateStr}T${arrTimeStr}:00.000Z`;
 
-      // 2. Build Typed Concrete Item
-      const newFlight: ConcreteItineraryItem = {
-        id: `itin-flight-${Date.now()}`,
-        tripId: effectiveTripId,
-        type: 'flight',
-        title: `Flight to ${arrivalCode || arrivalAirport} (${flightNumber.toUpperCase()})`,
-        startDateTime: startIso,
-        endDateTime: endIso,
-        location: `${departureAirport} (${departureCode}) → ${arrivalAirport} (${arrivalCode})`,
-        confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
-        notes: notes.trim() || undefined,
-        metadata: {
-          airline: airline.trim(),
-          flightNumber: flightNumber.trim().toUpperCase(),
-          departureAirport: departureCode || departureAirport.trim(),
-          arrivalAirport: arrivalCode || arrivalAirport.trim(),
-          terminal: terminal.trim() || undefined,
-          gate: gate.trim() || undefined,
-          seat: seat.trim() || undefined,
-          departureCity: departureAirport.split(',')[0].trim(),
-          arrivalCity: arrivalAirport.split(',')[0].trim(),
-          cabinClass: cabinClass.toLowerCase() as any,
-        },
-      };
+      // 2. Add or Update in In-Memory Store
+      if (isEditMode && itemId) {
+        updateItem(itemId, {
+          title: `Flight to ${arrivalCode || arrivalAirport} (${flightNumber.toUpperCase()})`,
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: `${departureAirport} (${departureCode}) → ${arrivalAirport} (${arrivalCode})`,
+          confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
+          notes: notes.trim() || undefined,
+          metadata: {
+            ...flightMeta,
+            airline: airline.trim(),
+            flightNumber: flightNumber.trim().toUpperCase(),
+            departureAirport: departureCode || departureAirport.trim(),
+            arrivalAirport: arrivalCode || arrivalAirport.trim(),
+            terminal: terminal.trim() || undefined,
+            gate: gate.trim() || undefined,
+            seat: seat.trim() || undefined,
+            departureCity: departureAirport.split(',')[0].trim(),
+            arrivalCity: arrivalAirport.split(',')[0].trim(),
+            cabinClass: cabinClass.toLowerCase() as any,
+          },
+        });
+      } else {
+        const newFlight: ConcreteItineraryItem = {
+          id: `itin-flight-${Date.now()}`,
+          tripId: effectiveTripId,
+          type: 'flight',
+          title: `Flight to ${arrivalCode || arrivalAirport} (${flightNumber.toUpperCase()})`,
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: `${departureAirport} (${departureCode}) → ${arrivalAirport} (${arrivalCode})`,
+          confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
+          notes: notes.trim() || undefined,
+          metadata: {
+            airline: airline.trim(),
+            flightNumber: flightNumber.trim().toUpperCase(),
+            departureAirport: departureCode || departureAirport.trim(),
+            arrivalAirport: arrivalCode || arrivalAirport.trim(),
+            terminal: terminal.trim() || undefined,
+            gate: gate.trim() || undefined,
+            seat: seat.trim() || undefined,
+            departureCity: departureAirport.split(',')[0].trim(),
+            arrivalCity: arrivalAirport.split(',')[0].trim(),
+            cabinClass: cabinClass.toLowerCase() as any,
+          },
+        };
+        addItem(newFlight);
+      }
 
-      // 3. Add to In-Memory Store
-      addItem(newFlight);
-
-      // 4. Navigate back to Itinerary Timeline
+      // 3. Navigate back to previous screen
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -220,26 +284,20 @@ export default function AddFlightScreen() {
   // Live Formatted Time Strings for Preview
   // -------------------------------------------------------------------------
   const previewDepartureTime = useMemo(() => {
-    if (!departureTime) return '8:30 PM';
-    const parts = departureTime.split(':');
-    if (parts.length < 2) return departureTime;
-    let h = parseInt(parts[0], 10);
-    const m = parts[1];
+    let h = departureDateObj.getHours();
+    const m = String(departureDateObj.getMinutes()).padStart(2, '0');
     const ampm = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     return `${h}:${m} ${ampm}`;
-  }, [departureTime]);
+  }, [departureDateObj]);
 
   const previewArrivalTime = useMemo(() => {
-    if (!arrivalTime) return '11:15 AM';
-    const parts = arrivalTime.split(':');
-    if (parts.length < 2) return arrivalTime;
-    let h = parseInt(parts[0], 10);
-    const m = parts[1];
+    let h = arrivalDateObj.getHours();
+    const m = String(arrivalDateObj.getMinutes()).padStart(2, '0');
     const ampm = h >= 12 ? 'PM' : 'AM';
     h = h % 12 || 12;
     return `${h}:${m} ${ampm}`;
-  }, [arrivalTime]);
+  }, [arrivalDateObj]);
 
   return (
     <KeyboardAvoidingView
@@ -262,9 +320,13 @@ export default function AddFlightScreen() {
           {/* ── 1. Top Header ────────────────────────────────────────────── */}
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>Add flight</Text>
+              <Text style={styles.headerTitle}>
+                {isEditMode ? 'Edit Flight' : 'Add flight'}
+              </Text>
               <Text style={styles.headerSubtitle}>
-                Enter details manually or review your booking.
+                {isEditMode
+                  ? 'Update flight reservation details and times.'
+                  : 'Enter details manually or review your booking.'}
               </Text>
             </View>
 
@@ -277,7 +339,12 @@ export default function AddFlightScreen() {
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <Image
+                source={require('@/assets/images/icons/close.svg')}
+                style={styles.closeButtonIcon}
+                tintColor={colors.textSecondary}
+                contentFit="contain"
+              />
             </Pressable>
           </View>
 
@@ -328,7 +395,14 @@ export default function AddFlightScreen() {
                     errors.flightNumber ? styles.inputWrapperError : null,
                   ]}
                 >
-                  <Text style={styles.hashIcon}>#</Text>
+                  <View style={styles.inputIconBox}>
+                    <Image
+                      source={require('@/assets/images/icons/hash.svg')}
+                      style={styles.inputIcon}
+                      tintColor={colors.textMuted}
+                      contentFit="contain"
+                    />
+                  </View>
                   <TextInput
                     style={[styles.textInput, styles.uppercaseInput]}
                     value={flightNumber}
@@ -393,7 +467,12 @@ export default function AddFlightScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Swap departure and arrival"
                 >
-                  <Text style={styles.swapIconText}>⇅</Text>
+                  <Image
+                    source={require('@/assets/images/icons/swap-vert.svg')}
+                    style={styles.swapIcon}
+                    tintColor={colors.primary}
+                    contentFit="contain"
+                  />
                 </Pressable>
               </View>
 
@@ -435,33 +514,24 @@ export default function AddFlightScreen() {
               {/* Departs Column */}
               <View style={styles.scheduleColumn}>
                 <View style={styles.scheduleHeaderRow}>
-                  <Text style={styles.scheduleHeaderIcon}>📅</Text>
-                  <Text style={styles.scheduleHeaderLabel}>DEPARTS *</Text>
-                </View>
-                <View style={styles.scheduleInputWrapper}>
-                  <TextInput
-                    style={styles.scheduleInput}
-                    value={departureDate}
-                    onChangeText={(t) => {
-                      setDepartureDate(t);
-                      if (errors.departureDate)
-                        setErrors((prev) => ({ ...prev, departureDate: '' }));
-                    }}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textMuted}
+                  <Image
+                    source={require('@/assets/images/icons/calendar.svg')}
+                    style={styles.scheduleHeaderIcon}
+                    tintColor={colors.primary}
+                    contentFit="contain"
                   />
+                  <Text style={styles.scheduleHeaderLabel}>DEPARTS</Text>
                 </View>
-                <View style={[styles.scheduleInputWrapper, { marginTop: spacing.sm }]}>
-                  <TextInput
-                    style={styles.scheduleInput}
-                    value={departureTime}
-                    onChangeText={(t) => {
-                      setDepartureTime(t);
-                      if (errors.departureTime)
-                        setErrors((prev) => ({ ...prev, departureTime: '' }));
-                    }}
-                    placeholder="HH:MM (24h)"
-                    placeholderTextColor={colors.textMuted}
+                <DateTimePickerField
+                  mode="date"
+                  value={departureDateObj}
+                  onChange={setDepartureDateObj}
+                />
+                <View style={{ marginTop: spacing.sm }}>
+                  <DateTimePickerField
+                    mode="time"
+                    value={departureDateObj}
+                    onChange={setDepartureDateObj}
                   />
                 </View>
               </View>
@@ -472,40 +542,28 @@ export default function AddFlightScreen() {
               {/* Arrives Column */}
               <View style={styles.scheduleColumn}>
                 <View style={styles.scheduleHeaderRow}>
-                  <Text style={styles.scheduleHeaderIcon}>🕒</Text>
-                  <Text style={styles.scheduleHeaderLabel}>ARRIVES *</Text>
-                </View>
-                <View style={styles.scheduleInputWrapper}>
-                  <TextInput
-                    style={styles.scheduleInput}
-                    value={arrivalDate}
-                    onChangeText={(t) => {
-                      setArrivalDate(t);
-                      if (errors.arrivalDate)
-                        setErrors((prev) => ({ ...prev, arrivalDate: '' }));
-                    }}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textMuted}
+                  <Image
+                    source={require('@/assets/images/icons/clock.svg')}
+                    style={styles.scheduleHeaderIcon}
+                    tintColor={colors.primary}
+                    contentFit="contain"
                   />
+                  <Text style={styles.scheduleHeaderLabel}>ARRIVES</Text>
                 </View>
-                <View style={[styles.scheduleInputWrapper, { marginTop: spacing.sm }]}>
-                  <TextInput
-                    style={styles.scheduleInput}
-                    value={arrivalTime}
-                    onChangeText={(t) => {
-                      setArrivalTime(t);
-                      if (errors.arrivalTime)
-                        setErrors((prev) => ({ ...prev, arrivalTime: '' }));
-                    }}
-                    placeholder="HH:MM (24h)"
-                    placeholderTextColor={colors.textMuted}
+                <DateTimePickerField
+                  mode="date"
+                  value={arrivalDateObj}
+                  onChange={setArrivalDateObj}
+                />
+                <View style={{ marginTop: spacing.sm }}>
+                  <DateTimePickerField
+                    mode="time"
+                    value={arrivalDateObj}
+                    onChange={setArrivalDateObj}
                   />
                 </View>
               </View>
             </View>
-            {(errors.departureDate || errors.departureTime || errors.arrivalDate || errors.arrivalTime) ? (
-              <Text style={styles.errorText}>Please provide valid dates & times (YYYY-MM-DD and HH:MM).</Text>
-            ) : null}
           </View>
 
           {/* ── 5. Boarding Details Section ──────────────────────────────── */}
@@ -589,7 +647,12 @@ export default function AddFlightScreen() {
                       {cls}
                     </Text>
                     {cabinClass === cls && (
-                      <Text style={styles.classOptionCheck}>✓</Text>
+                      <Image
+                        source={require('@/assets/images/icons/checkmark.svg')}
+                        style={styles.classOptionCheck}
+                        tintColor={colors.primary}
+                        contentFit="contain"
+                      />
                     )}
                   </Pressable>
                 ))}
@@ -638,7 +701,7 @@ export default function AddFlightScreen() {
                     {airline || 'Airline'} {flightNumber || ''}
                   </Text>
                   <Text style={styles.previewFlightDate}>
-                    {departureDate} · {cabinClass}
+                    {`${departureDateObj.getFullYear()}-${String(departureDateObj.getMonth()+1).padStart(2,'0')}-${String(departureDateObj.getDate()).padStart(2,'0')}`} · {cabinClass}
                   </Text>
                 </View>
                 <View style={styles.previewAirlineLogoCircle}>
@@ -713,11 +776,26 @@ export default function AddFlightScreen() {
                 pressed && styles.buttonPressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Add Flight to Itinerary"
+              accessibilityLabel={isEditMode ? 'Save Changes' : 'Add Flight to Itinerary'}
             >
-              <Text style={styles.submitButtonIcon}>⊕</Text>
+              <Image
+                source={
+                  isEditMode
+                    ? require('@/assets/images/icons/checkmark.svg')
+                    : require('@/assets/images/icons/plus.svg')
+                }
+                style={styles.submitButtonIcon}
+                tintColor={colors.textOnPrimary}
+                contentFit="contain"
+              />
               <Text style={styles.submitButtonText}>
-                {isSubmitting ? 'Adding Flight...' : 'Add Flight to Itinerary'}
+                {isSubmitting
+                  ? isEditMode
+                    ? 'Saving Changes...'
+                    : 'Adding Flight...'
+                  : isEditMode
+                  ? 'Save Changes'
+                  : 'Add Flight to Itinerary'}
               </Text>
             </Pressable>
 
@@ -791,10 +869,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  closeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
+  closeButtonIcon: {
+    width: 14,
+    height: 14,
   },
   buttonPressed: {
     opacity: 0.8,
@@ -853,12 +930,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
   },
-  hashIcon: {
-    fontSize: 16,
-    color: colors.textMuted,
-    marginRight: spacing.sm,
-    fontWeight: '600',
-  },
+
   textInput: {
     flex: 1,
     fontFamily: typography.body.fontFamily,
@@ -946,10 +1018,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  swapIconText: {
-    fontSize: 18,
-    color: colors.primary,
-    fontWeight: '600',
+  swapIcon: {
+    width: 18,
+    height: 18,
   },
 
   // --- Schedule Section ---
@@ -972,7 +1043,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   scheduleHeaderIcon: {
-    fontSize: 14,
+    width: 14,
+    height: 14,
   },
   scheduleHeaderLabel: {
     fontSize: 11,
@@ -1077,9 +1149,8 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   classOptionCheck: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.primary,
+    width: 16,
+    height: 16,
   },
 
   // --- Notes Section ---
@@ -1257,10 +1328,11 @@ const styles = StyleSheet.create({
     ...shadows.float,
   },
   submitButtonIcon: {
-    fontSize: 18,
-    color: colors.textOnPrimary,
-    fontWeight: 'bold',
+    width: 18,
+    height: 18,
+    marginRight: spacing.xs,
   },
+
   submitButtonText: {
     fontFamily: typography.label.fontFamily,
     fontSize: 15,

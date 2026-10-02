@@ -31,6 +31,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { addItem } from '@/services/itineraryStore';
 import { ConcreteItineraryItem } from '@/types/itinerary';
+import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 
 // ---------------------------------------------------------------------------
 // Category Definitions & Icon Mapping
@@ -71,16 +72,23 @@ function getCategoryIcon(cat: ActivityCategory) {
   }
 }
 
-function formatTimeString(time24: string): string {
-  if (!time24) return '';
-  const parts = time24.split(':');
-  if (parts.length < 2) return time24;
-  let h = parseInt(parts[0], 10);
-  const m = parts[1];
-  if (isNaN(h)) return time24;
+function formatTimeString(date: Date): string {
+  let h = date.getHours();
+  const m = String(date.getMinutes()).padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${h}:${m} ${ampm}`;
+}
+
+function toTimeKey(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 export default function AddActivityScreen() {
@@ -95,9 +103,9 @@ export default function AddActivityScreen() {
   const [location, setLocation] = useState('Shibuya, Tokyo');
   const [category, setCategory] = useState<ActivityCategory>('Culture');
 
-  const [date, setDate] = useState('2028-03-12');
-  const [startTime, setStartTime] = useState('14:00');
-  const [endTime, setEndTime] = useState('16:00');
+  const [date, setDate] = useState<Date>(new Date('2028-03-12T14:00:00.000Z'));
+  const [startTime, setStartTime] = useState<Date>(new Date('2028-03-12T14:00:00.000Z'));
+  const [endTime, setEndTime] = useState<Date | null>(new Date('2028-03-12T16:00:00.000Z'));
 
   const [website, setWebsite] = useState('https://tokyowalkingtours.jp');
   const [ticketInfo, setTicketInfo] = useState('Mobile QR Voucher (2 Adults)');
@@ -124,12 +132,6 @@ export default function AddActivityScreen() {
     if (!activityName.trim()) {
       newErrors.activityName = 'Activity name is required.';
     }
-    if (!date.trim()) {
-      newErrors.date = 'Date is required.';
-    }
-    if (!startTime.trim()) {
-      newErrors.startTime = 'Start time is required.';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -141,8 +143,10 @@ export default function AddActivityScreen() {
 
     try {
       // 1. Construct ISO Date-Time strings
-      const startIso = `${date}T${startTime}:00.000Z`;
-      const endIso = endTime.trim() ? `${date}T${endTime}:00.000Z` : undefined;
+      const dateStr = toDateKey(date);
+      const startTimeStr = toTimeKey(startTime);
+      const startIso = `${dateStr}T${startTimeStr}:00.000Z`;
+      const endIso = endTime ? `${dateStr}T${toTimeKey(endTime)}:00.000Z` : undefined;
 
       // 2. Build Typed Concrete Activity Item
       const newActivity: ConcreteItineraryItem = {
@@ -159,7 +163,7 @@ export default function AddActivityScreen() {
           category: category,
           website: website.trim() || undefined,
           ticketInformation: ticketInfo.trim() || undefined,
-          duration: endTime.trim() ? `${startTime} - ${endTime}` : undefined,
+          duration: endTime ? `${startTimeStr} - ${toTimeKey(endTime)}` : undefined,
           meetingPoint: location.trim() || undefined,
         },
       };
@@ -184,9 +188,9 @@ export default function AddActivityScreen() {
   // -------------------------------------------------------------------------
 
   const previewTimeRange = useMemo(() => {
-    const startFmt = formatTimeString(startTime) || startTime;
-    if (!endTime.trim()) return startFmt;
-    const endFmt = formatTimeString(endTime) || endTime;
+    const startFmt = formatTimeString(startTime);
+    if (!endTime) return startFmt;
+    const endFmt = formatTimeString(endTime);
     return `${startFmt} – ${endFmt}`;
   }, [startTime, endTime]);
 
@@ -230,7 +234,12 @@ export default function AddActivityScreen() {
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <Image
+                source={require('@/assets/images/icons/close.svg')}
+                style={styles.closeButtonIcon}
+                tintColor={colors.textSecondary}
+                contentFit="contain"
+              />
             </Pressable>
           </View>
 
@@ -268,7 +277,14 @@ export default function AddActivityScreen() {
               <View style={[styles.fieldGroup, styles.fieldDivider]}>
                 <Text style={styles.inputLabel}>Location</Text>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.pinIcon}>📍</Text>
+                  <View style={styles.inputIconBox}>
+                    <Image
+                      source={require('@/assets/images/icons/location-pin.svg')}
+                      style={styles.inputIcon}
+                      tintColor={colors.textSecondary}
+                      contentFit="contain"
+                    />
+                  </View>
                   <TextInput
                     style={styles.textInput}
                     value={location}
@@ -324,25 +340,12 @@ export default function AddActivityScreen() {
               {/* Date */}
               <View style={styles.fieldGroup}>
                 <Text style={styles.inputLabel}>Date *</Text>
-                <View
-                  style={[
-                    styles.inputWrapper,
-                    errors.date ? styles.inputWrapperError : null,
-                  ]}
-                >
-                  <Text style={styles.calendarIcon}>📅</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={date}
-                    onChangeText={(t) => {
-                      setDate(t);
-                      if (errors.date) setErrors((prev) => ({ ...prev, date: '' }));
-                    }}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textMuted}
-                    maxLength={10}
-                  />
-                </View>
+                <DateTimePickerField
+                  mode="date"
+                  value={date}
+                  onChange={setDate}
+                  hasError={Boolean(errors.date)}
+                />
                 {errors.date ? (
                   <Text style={styles.errorText}>{errors.date}</Text>
                 ) : null}
@@ -353,25 +356,12 @@ export default function AddActivityScreen() {
                 {/* Start Time */}
                 <View style={styles.flexColumn}>
                   <Text style={styles.inputLabel}>Start Time *</Text>
-                  <View
-                    style={[
-                      styles.inputWrapper,
-                      errors.startTime ? styles.inputWrapperError : null,
-                    ]}
-                  >
-                    <Text style={styles.clockIcon}>🕒</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={startTime}
-                      onChangeText={(t) => {
-                        setStartTime(t);
-                        if (errors.startTime) setErrors((prev) => ({ ...prev, startTime: '' }));
-                      }}
-                      placeholder="14:00"
-                      placeholderTextColor={colors.textMuted}
-                      maxLength={5}
-                    />
-                  </View>
+                  <DateTimePickerField
+                    mode="time"
+                    value={startTime}
+                    onChange={setStartTime}
+                    hasError={Boolean(errors.startTime)}
+                  />
                   {errors.startTime ? (
                     <Text style={styles.errorText}>{errors.startTime}</Text>
                   ) : null}
@@ -380,17 +370,11 @@ export default function AddActivityScreen() {
                 {/* End Time */}
                 <View style={styles.flexColumn}>
                   <Text style={styles.inputLabel}>End Time</Text>
-                  <View style={styles.inputWrapper}>
-                    <Text style={styles.clockIcon}>🕒</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={endTime}
-                      onChangeText={setEndTime}
-                      placeholder="16:00"
-                      placeholderTextColor={colors.textMuted}
-                      maxLength={5}
-                    />
-                  </View>
+                  <DateTimePickerField
+                    mode="time"
+                    value={endTime ?? startTime}
+                    onChange={setEndTime}
+                  />
                 </View>
               </View>
             </View>
@@ -407,7 +391,14 @@ export default function AddActivityScreen() {
                   Website <Text style={styles.optionalLabel}>(Optional)</Text>
                 </Text>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.linkIcon}>🔗</Text>
+                  <View style={styles.inputIconBox}>
+                    <Image
+                      source={require('@/assets/images/icons/link.svg')}
+                      style={styles.inputIcon}
+                      tintColor={colors.textSecondary}
+                      contentFit="contain"
+                    />
+                  </View>
                   <TextInput
                     style={styles.textInput}
                     value={website}
@@ -426,7 +417,14 @@ export default function AddActivityScreen() {
                   Ticket Information <Text style={styles.optionalLabel}>(Optional)</Text>
                 </Text>
                 <View style={styles.inputWrapper}>
-                  <Text style={styles.ticketIcon}>🎟️</Text>
+                  <View style={styles.inputIconBox}>
+                    <Image
+                      source={require('@/assets/images/icons/ticket.svg')}
+                      style={styles.inputIcon}
+                      tintColor={colors.textSecondary}
+                      contentFit="contain"
+                    />
+                  </View>
                   <TextInput
                     style={styles.textInput}
                     value={ticketInfo}
@@ -485,7 +483,12 @@ export default function AddActivityScreen() {
                         {activityName.trim() || 'Shibuya Crossing'}
                       </Text>
                       <View style={styles.previewLocationRow}>
-                        <Text style={styles.previewLocationIcon}>📍</Text>
+                        <Image
+                          source={require('@/assets/images/icons/location-pin.svg')}
+                          style={styles.previewLocationIcon}
+                          tintColor={colors.textSecondary}
+                          contentFit="contain"
+                        />
                         <Text style={styles.previewLocationText} numberOfLines={1}>
                           {location.trim() || 'Where is this?'}
                         </Text>
@@ -613,10 +616,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  closeButtonText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: '500',
+  closeButtonIcon: {
+    width: 14,
+    height: 14,
   },
   buttonPressed: {
     opacity: 0.85,
@@ -688,25 +690,14 @@ const styles = StyleSheet.create({
   inputWrapperError: {
     borderColor: colors.error,
   },
-  pinIcon: {
-    fontSize: 14,
+  inputIconBox: {
     marginRight: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  calendarIcon: {
-    fontSize: 14,
-    marginRight: spacing.sm,
-  },
-  clockIcon: {
-    fontSize: 14,
-    marginRight: spacing.sm,
-  },
-  linkIcon: {
-    fontSize: 14,
-    marginRight: spacing.sm,
-  },
-  ticketIcon: {
-    fontSize: 14,
-    marginRight: spacing.sm,
+  inputIcon: {
+    width: 16,
+    height: 16,
   },
   textInput: {
     flex: 1,
@@ -875,10 +866,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+    gap: 3,
   },
   previewLocationIcon: {
-    fontSize: 12,
-    marginRight: 3,
+    width: 12,
+    height: 12,
   },
   previewLocationText: {
     fontFamily: typography.caption.fontFamily,

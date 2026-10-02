@@ -28,9 +28,11 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image } from 'expo-image';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { addItem } from '@/services/itineraryStore';
 import { ConcreteItineraryItem, TransportationType } from '@/types/itinerary';
+import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 
 // ---------------------------------------------------------------------------
 // 1. Types and Option Definitions
@@ -89,6 +91,18 @@ function calculateDuration(
   }
 }
 
+function formatTime12h(time24: string): string {
+  if (!time24) return '';
+  const parts = time24.split(':');
+  if (parts.length < 2) return time24;
+  let h = parseInt(parts[0], 10);
+  const m = parts[1];
+  if (isNaN(h)) return time24;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
+}
+
 // ---------------------------------------------------------------------------
 // 3. Screen Component
 // ---------------------------------------------------------------------------
@@ -106,9 +120,9 @@ export default function AddTransportationScreen() {
   const [toLocation, setToLocation] = useState('Kyoto Station');
   const [providerRoute, setProviderRoute] = useState('Tokaido Shinkansen');
 
-  const [date, setDate] = useState('2028-03-12');
-  const [departureTime, setDepartureTime] = useState('09:00');
-  const [arrivalTime, setArrivalTime] = useState('11:20');
+  const [dateObj, setDateObj] = useState<Date>(new Date('2028-03-12T09:00:00.000Z'));
+  const [departureTimeObj, setDepartureTimeObj] = useState<Date>(new Date('2028-03-12T09:00:00.000Z'));
+  const [arrivalTimeObj, setArrivalTimeObj] = useState<Date>(new Date('2028-03-12T11:20:00.000Z'));
   const [isOvernight, setIsOvernight] = useState(false);
 
   const [bookingNumber, setBookingNumber] = useState('JR-784920');
@@ -128,9 +142,12 @@ export default function AddTransportationScreen() {
     [selectedType]
   );
 
+  const toTimeStr = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
   const durationText = useMemo(
-    () => calculateDuration(departureTime, arrivalTime, isOvernight),
-    [departureTime, arrivalTime, isOvernight]
+    () => calculateDuration(toTimeStr(departureTimeObj), toTimeStr(arrivalTimeObj), isOvernight),
+    [departureTimeObj, arrivalTimeObj, isOvernight]
   );
 
   // -------------------------------------------------------------------------
@@ -159,12 +176,6 @@ export default function AddTransportationScreen() {
     if (!toLocation.trim()) {
       newErrors.toLocation = 'Arrival destination is required.';
     }
-    if (!date.trim()) {
-      newErrors.date = 'Travel date is required.';
-    }
-    if (!departureTime.trim()) {
-      newErrors.departureTime = 'Departure time is required.';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -176,17 +187,20 @@ export default function AddTransportationScreen() {
 
     try {
       // 1. Compute Start and End ISO strings
-      const startIso = `${date}T${departureTime}:00.000Z`;
+      const dateStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}`;
+      const depTimeStr = toTimeStr(departureTimeObj);
+      const arrTimeStr = toTimeStr(arrivalTimeObj);
+      const startIso = `${dateStr}T${depTimeStr}:00.000Z`;
 
       let endIso: string | undefined;
-      if (arrivalTime.trim()) {
+      if (arrivalTimeObj) {
         if (isOvernight) {
-          const startDateObj = new Date(date);
-          startDateObj.setDate(startDateObj.getDate() + 1);
-          const nextDateStr = startDateObj.toISOString().split('T')[0];
-          endIso = `${nextDateStr}T${arrivalTime}:00.000Z`;
+          const nextDay = new Date(dateObj);
+          nextDay.setDate(nextDay.getDate() + 1);
+          const nextDateStr = `${nextDay.getFullYear()}-${String(nextDay.getMonth()+1).padStart(2,'0')}-${String(nextDay.getDate()).padStart(2,'0')}`;
+          endIso = `${nextDateStr}T${arrTimeStr}:00.000Z`;
         } else {
-          endIso = `${date}T${arrivalTime}:00.000Z`;
+          endIso = `${dateStr}T${arrTimeStr}:00.000Z`;
         }
       }
 
@@ -214,8 +228,8 @@ export default function AddTransportationScreen() {
           bookingNumber: bookingNumber.trim() || undefined,
           seat: seat.trim() || undefined,
           provider: providerRoute.trim() || undefined,
-          pickupTime: departureTime.trim() || undefined,
-          dropoffTime: arrivalTime.trim() || undefined,
+          pickupTime: depTimeStr || undefined,
+          dropoffTime: arrTimeStr || undefined,
         },
       };
 
@@ -270,7 +284,12 @@ export default function AddTransportationScreen() {
               accessibilityRole="button"
               accessibilityLabel="Cancel"
             >
-              <Text style={styles.closeButtonText}>✕</Text>
+              <Image
+                source={require('@/assets/images/icons/close.svg')}
+                style={styles.closeButtonIcon}
+                tintColor={colors.textSecondary}
+                contentFit="contain"
+              />
             </Pressable>
           </View>
 
@@ -374,14 +393,24 @@ export default function AddTransportationScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Swap departure and arrival"
                 >
-                  <Text style={styles.swapIconText}>⇅</Text>
+                  <Image
+                    source={require('@/assets/images/icons/swap-vert.svg')}
+                    style={styles.swapIcon}
+                    tintColor={colors.primary}
+                    contentFit="contain"
+                  />
                 </Pressable>
               </View>
 
               {/* TO Location */}
               <View style={styles.routeRow}>
                 <View style={styles.toPin}>
-                  <Text style={styles.toPinIcon}>📍</Text>
+                  <Image
+                    source={require('@/assets/images/icons/location-pin.svg')}
+                    style={styles.toPinIcon}
+                    tintColor={colors.primary}
+                    contentFit="contain"
+                  />
                 </View>
                 <View style={styles.routeInputContainer}>
                   <View style={styles.routeInputHeaderRow}>
@@ -435,68 +464,31 @@ export default function AddTransportationScreen() {
               {/* Date Input */}
               <View style={styles.formGroup}>
                 <Text style={styles.fieldLabel}>TRAVEL DATE</Text>
-                <View style={styles.inputWithIconContainer}>
-                  <Text style={styles.inputLeadingEmoji}>📅</Text>
-                  <TextInput
-                    value={date}
-                    onChangeText={(t) => {
-                      setDate(t);
-                      if (errors.date) setErrors((prev) => ({ ...prev, date: '' }));
-                    }}
-                    placeholder="YYYY-MM-DD (e.g. 2028-03-12)"
-                    placeholderTextColor={colors.textMuted}
-                    style={[
-                      styles.inputField,
-                      styles.inputFieldWithIcon,
-                      Boolean(errors.date) && styles.inputFieldError,
-                    ]}
-                  />
-                </View>
-                {errors.date ? (
-                  <Text style={styles.errorText}>{errors.date}</Text>
-                ) : null}
+                <DateTimePickerField
+                  mode="date"
+                  value={dateObj}
+                  onChange={setDateObj}
+                />
               </View>
 
               {/* Time Inputs (Departure & Arrival) */}
               <View style={styles.timeGrid}>
                 <View style={styles.timeCol}>
                   <Text style={styles.fieldLabel}>DEPARTURE</Text>
-                  <View style={styles.inputWithIconContainer}>
-                    <Text style={styles.inputLeadingEmoji}>🕒</Text>
-                    <TextInput
-                      value={departureTime}
-                      onChangeText={(t) => {
-                        setDepartureTime(t);
-                        if (errors.departureTime) {
-                          setErrors((prev) => ({ ...prev, departureTime: '' }));
-                        }
-                      }}
-                      placeholder="HH:MM (e.g. 09:00)"
-                      placeholderTextColor={colors.textMuted}
-                      style={[
-                        styles.inputField,
-                        styles.inputFieldWithIcon,
-                        Boolean(errors.departureTime) && styles.inputFieldError,
-                      ]}
-                    />
-                  </View>
-                  {errors.departureTime ? (
-                    <Text style={styles.errorText}>{errors.departureTime}</Text>
-                  ) : null}
+                  <DateTimePickerField
+                    mode="time"
+                    value={departureTimeObj}
+                    onChange={setDepartureTimeObj}
+                  />
                 </View>
 
                 <View style={styles.timeCol}>
                   <Text style={styles.fieldLabel}>ARRIVAL</Text>
-                  <View style={styles.inputWithIconContainer}>
-                    <Text style={styles.inputLeadingEmoji}>🕒</Text>
-                    <TextInput
-                      value={arrivalTime}
-                      onChangeText={setArrivalTime}
-                      placeholder="HH:MM (e.g. 11:20)"
-                      placeholderTextColor={colors.textMuted}
-                      style={[styles.inputField, styles.inputFieldWithIcon]}
-                    />
-                  </View>
+                  <DateTimePickerField
+                    mode="time"
+                    value={arrivalTimeObj}
+                    onChange={setArrivalTimeObj}
+                  />
                 </View>
               </View>
 
@@ -504,7 +496,12 @@ export default function AddTransportationScreen() {
               {durationText ? (
                 <View style={styles.durationRow}>
                   <View style={styles.directBadge}>
-                    <Text style={styles.directCheckIcon}>✓</Text>
+                    <Image
+                      source={require('@/assets/images/icons/checkmark.svg')}
+                      style={styles.directCheckIcon}
+                      tintColor={colors.primary}
+                      contentFit="contain"
+                    />
                     <Text style={styles.directText}>Direct journey</Text>
                   </View>
                   <Text style={styles.durationValue}>
@@ -567,6 +564,101 @@ export default function AddTransportationScreen() {
                 textAlignVertical="top"
                 style={styles.notesTextArea}
               />
+            </View>
+          </View>
+
+          {/* ── Section 6: Review / Preview ──────────────────────────── */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>REVIEW</Text>
+              <Text style={styles.previewLiveLabel}>Live Preview</Text>
+            </View>
+
+            <View style={styles.previewCard}>
+              {/* Left accent stripe */}
+              <View style={styles.previewStripe} />
+
+              <View style={styles.previewBody}>
+                {/* Header: Mode badge + title */}
+                <View style={styles.previewHeaderRow}>
+                  <View style={styles.previewModeBadge}>
+                    <Text style={styles.previewModeEmoji}>{activeMode.emoji}</Text>
+                    <Text style={styles.previewModeLabel}>{activeMode.label}</Text>
+                  </View>
+                  <View style={styles.previewConfirmedBadge}>
+                    <Text style={styles.previewConfirmedText}>Confirmed</Text>
+                  </View>
+                </View>
+
+                {/* Route: From → To */}
+                <View style={styles.previewRouteRow}>
+                  <View style={styles.previewRouteCol}>
+                    <Text style={styles.previewRouteTag}>FROM</Text>
+                    <Text style={styles.previewRouteMain} numberOfLines={1}>
+                      {fromLocation.trim() || 'Departure'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.previewRouteArrowCol}>
+                    <View style={styles.previewArrowLine} />
+                    <Text style={styles.previewArrowIcon}>›</Text>
+                    {durationText ? (
+                      <Text style={styles.previewDurationBadge}>{durationText}</Text>
+                    ) : null}
+                  </View>
+
+                  <View style={[styles.previewRouteCol, styles.previewRouteColRight]}>
+                    <Text style={styles.previewRouteTag}>TO</Text>
+                    <Text style={styles.previewRouteMain} numberOfLines={1}>
+                      {toLocation.trim() || 'Destination'}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Date & Times bar */}
+                <View style={styles.previewTimesBar}>
+                  <View style={styles.previewTimeItem}>
+                    <Text style={styles.previewTimeTag}>DATE</Text>
+                    <Text style={styles.previewTimeValue}>{`${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')}` || '—'}</Text>
+                  </View>
+                  <View style={styles.previewTimeDivider} />
+                  <View style={styles.previewTimeItem}>
+                    <Text style={styles.previewTimeTag}>DEPARTS</Text>
+                    <Text style={styles.previewTimeValue}>
+                      {formatTime12h(toTimeStr(departureTimeObj))}
+                    </Text>
+                  </View>
+                  <View style={styles.previewTimeDivider} />
+                  <View style={styles.previewTimeItem}>
+                    <Text style={styles.previewTimeTag}>ARRIVES</Text>
+                    <Text style={styles.previewTimeValue}>
+                      {formatTime12h(toTimeStr(arrivalTimeObj))}
+                      {isOvernight ? (
+                        <Text style={styles.previewOvernightTag}> +1</Text>
+                      ) : null}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Footer: Route name, Booking ref, Seat */}
+                {(providerRoute.trim() || bookingNumber.trim() || seat.trim()) ? (
+                  <View style={styles.previewFooterRow}>
+                    {providerRoute.trim() ? (
+                      <Text style={styles.previewProviderText} numberOfLines={1}>
+                        {providerRoute.trim()}
+                      </Text>
+                    ) : null}
+                    <View style={styles.previewFooterRight}>
+                      {bookingNumber.trim() ? (
+                        <Text style={styles.previewRefText}>#{bookingNumber.trim()}</Text>
+                      ) : null}
+                      {seat.trim() ? (
+                        <Text style={styles.previewSeatText}>{seat.trim()}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ) : null}
+              </View>
             </View>
           </View>
 
@@ -664,10 +756,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  closeButtonText: {
-    fontSize: 16,
-    color: colors.textSecondary,
-    fontWeight: '500',
+  closeButtonIcon: {
+    width: 14,
+    height: 14,
   },
   buttonPressed: {
     opacity: 0.85,
@@ -822,7 +913,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   toPinIcon: {
-    fontSize: 12,
+    width: 14,
+    height: 14,
   },
   routeInputContainer: {
     flex: 1,
@@ -870,10 +962,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadows.card,
   },
-  swapIconText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textSecondary,
+  swapIcon: {
+    width: 16,
+    height: 16,
   },
 
   // --- Inputs ---
@@ -907,19 +998,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     color: colors.textSecondary,
     marginBottom: 2,
-  },
-  inputWithIconContainer: {
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  inputLeadingEmoji: {
-    position: 'absolute',
-    left: 10,
-    zIndex: 2,
-    fontSize: 14,
-  },
-  inputFieldWithIcon: {
-    paddingLeft: 34,
   },
 
   // --- Overnight Toggle ---
@@ -980,9 +1058,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   directCheckIcon: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '700',
+    width: 12,
+    height: 12,
   },
   directText: {
     fontFamily: typography.caption.fontFamily,
@@ -1011,6 +1088,189 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     color: colors.textPrimary,
+  },
+
+  // --- Preview / Review Card ---
+  previewLiveLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: colors.primary,
+    fontFamily: typography.caption.fontFamily,
+    fontStyle: 'italic',
+  },
+  previewCard: {
+    position: 'relative',
+    backgroundColor: colors.surface,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    ...shadows.card,
+  },
+  previewStripe: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: colors.primary,
+  },
+  previewBody: {
+    padding: spacing.lg,
+    paddingLeft: spacing.lg + 4,
+  },
+  previewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  previewModeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.primarySurface,
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.full,
+  },
+  previewModeEmoji: {
+    fontSize: 16,
+  },
+  previewModeLabel: {
+    fontFamily: typography.label.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  previewConfirmedBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm,
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  previewConfirmedText: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: '500',
+  },
+  previewRouteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: radius.input,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  previewRouteCol: {
+    flex: 1,
+  },
+  previewRouteColRight: {
+    alignItems: 'flex-end',
+  },
+  previewRouteTag: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+    marginBottom: 2,
+  },
+  previewRouteMain: {
+    fontFamily: typography.body.fontFamily,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  previewRouteArrowCol: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.xs,
+    gap: 2,
+  },
+  previewArrowLine: {
+    width: 32,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  previewArrowIcon: {
+    fontSize: 18,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  previewDurationBadge: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.primary,
+    fontFamily: typography.caption.fontFamily,
+  },
+  previewTimesBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: radius.input,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  previewTimeItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  previewTimeTag: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.6,
+    color: colors.textMuted,
+    marginBottom: 2,
+  },
+  previewTimeValue: {
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  previewTimeDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.border,
+    marginHorizontal: spacing.xs,
+  },
+  previewOvernightTag: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  previewFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.backgroundAlt,
+  },
+  previewProviderText: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 12,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  previewFooterRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  previewRefText: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+    letterSpacing: 0.4,
+  },
+  previewSeatText: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 11,
+    color: colors.textSecondary,
   },
 
   // --- Actions ---
