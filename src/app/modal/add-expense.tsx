@@ -1,4 +1,7 @@
-import { PlaceholderScreen } from '@/components/dev/PlaceholderScreen';
-export default function AddExpenseModal() {
-  return <PlaceholderScreen route="/modal/add-expense" title="Add Expense" />;
-}
+/**
+ * Route: /modal/add-expense
+ *
+ * Re-exports the canonical AddExpenseScreen from /add/expense to ensure
+ * a single source of truth without duplicating forms or routes.
+ */
+export { default } from '../add/expense';

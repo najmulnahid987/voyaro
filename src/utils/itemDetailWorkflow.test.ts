@@ -23,6 +23,7 @@ import {
   HotelMetadata,
   TransportationMetadata,
 } from '../types/itinerary';
+import { groupItemsByDay } from './itineraryDateUtils';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -39,6 +40,7 @@ export function runItemDetailWorkflowTests() {
   resetSeedItems();
   const tripId = 'japan-adventure';
   const allSeedItems = getItems(tripId);
+  const initialCount = allSeedItems.length;
 
   // -------------------------------------------------------------------------
   // 1. FLIGHT Detail Retrieval & Verification
@@ -110,21 +112,94 @@ export function runItemDetailWorkflowTests() {
   assert(Boolean(transDetail!.notes), 'Transportation includes notes');
 
   // -------------------------------------------------------------------------
-  // 5. EDIT Action Verification
+  // 5. STEP 14 EDIT ACTIONS VERIFICATION (All 4 Types)
   // -------------------------------------------------------------------------
-  const updatedHotel = updateItem(hotel!.id, {
-    notes: 'Late check-in requested at 6 PM.',
-    metadata: { room: 'Presidential Suite 901' },
+
+  // 5.1 Edit FLIGHT
+  const updatedFlight = updateItem(flight!.id, {
+    notes: 'Upgraded to business class. Window seat 2K.',
+    metadata: {
+      flightNumber: 'EK589',
+      seat: '2K',
+      gate: '15B',
+      terminal: '2',
+      cabinClass: 'business',
+    },
   });
-  assert(updatedHotel?.notes === 'Late check-in requested at 6 PM.', 'Hotel notes updated successfully');
-  assert(
-    (updatedHotel?.metadata as HotelMetadata).room === 'Presidential Suite 901',
-    'Hotel room metadata updated successfully'
-  );
-  assert(
-    (getItem(hotel!.id)?.metadata as HotelMetadata).room === 'Presidential Suite 901',
-    'Store reflects updated hotel room immediately'
-  );
+  assert(updatedFlight?.id === flight!.id, 'Flight ID preserved after edit');
+  assert(updatedFlight?.tripId === flight!.tripId, 'Flight tripId preserved after edit');
+  assert((updatedFlight?.metadata as FlightMetadata).flightNumber === 'EK589', 'Flight number updated in store');
+  assert((updatedFlight?.metadata as FlightMetadata).seat === '2K', 'Flight seat updated in store');
+  assert(getItems(tripId).length === initialCount, 'No duplicate flight created on edit (count unchanged)');
+
+  // 5.2 Edit HOTEL
+  const updatedHotel = updateItem(hotel!.id, {
+    notes: 'Late check-in requested at 6 PM. VIP arrival gift requested.',
+    metadata: {
+      room: 'Presidential Suite 901',
+      guestName: 'Alex & Sarah Johnson',
+      checkIn: '4:00 PM',
+    },
+  });
+  assert(updatedHotel?.id === hotel!.id, 'Hotel ID preserved after edit');
+  assert(updatedHotel?.tripId === hotel!.tripId, 'Hotel tripId preserved after edit');
+  assert(updatedHotel?.notes === 'Late check-in requested at 6 PM. VIP arrival gift requested.', 'Hotel notes updated successfully');
+  assert((updatedHotel?.metadata as HotelMetadata).room === 'Presidential Suite 901', 'Hotel room updated in store');
+  assert((updatedHotel?.metadata as HotelMetadata).checkIn === '4:00 PM', 'Hotel checkIn updated in store');
+  assert(getItems(tripId).length === initialCount, 'No duplicate hotel created on edit (count unchanged)');
+
+  // 5.3 Edit ACTIVITY
+  const updatedActivity = updateItem(activity!.id, {
+    title: 'VIP Shibuya Crossing & Hidden Rooftops Tour',
+    notes: 'Meet at Shibuya Sky tower entrance instead of statue.',
+    metadata: {
+      category: 'Adventure',
+      guideName: 'Kenji & Takashi',
+      ticketInformation: 'VIP Fast-track QR Voucher (2 Adults)',
+    },
+  });
+  assert(updatedActivity?.id === activity!.id, 'Activity ID preserved after edit');
+  assert(updatedActivity?.tripId === activity!.tripId, 'Activity tripId preserved after edit');
+  assert(updatedActivity?.title === 'VIP Shibuya Crossing & Hidden Rooftops Tour', 'Activity title updated in store');
+  assert((updatedActivity?.metadata as ActivityMetadata).category === 'Adventure', 'Activity category updated in store');
+  assert(getItems(tripId).length === initialCount, 'No duplicate activity created on edit (count unchanged)');
+
+  // 5.4 Edit TRANSPORTATION
+  const updatedTransport = updateItem(transport!.id, {
+    title: 'Shinkansen Bullet Train (Hikari #501)',
+    location: 'Tokyo Station (Platform 16) → Kyoto Station',
+    notes: 'Mount Fuji view side seats confirmed. Large luggage space booked.',
+    metadata: {
+      provider: 'JR Tokaido Hikari',
+      platform: 'Platform 16',
+      seat: 'Car 1, Seat 1A & 1B',
+    },
+  });
+  assert(updatedTransport?.id === transport!.id, 'Transportation ID preserved after edit');
+  assert(updatedTransport?.tripId === transport!.tripId, 'Transportation tripId preserved after edit');
+  assert((updatedTransport?.metadata as TransportationMetadata).platform === 'Platform 16', 'Platform updated in store');
+  assert((updatedTransport?.metadata as TransportationMetadata).seat === 'Car 1, Seat 1A & 1B', 'Seat updated in store');
+  assert(getItems(tripId).length === initialCount, 'No duplicate transportation created on edit (count unchanged)');
+
+  // 5.5 CHRONOLOGICAL TIMELINE REORDERING VERIFICATION
+  // Move transport from March 12 to early morning March 10 (before flight)
+  const earlierTime = '2028-03-10T06:00:00.000Z';
+  updateItem(transport!.id, {
+    startDateTime: earlierTime,
+  });
+  const reorderedItems = getItems(tripId);
+  assert(reorderedItems[0].id === transport!.id, 'Transportation is now 1st item after date/time edit');
+  assert(reorderedItems.length === initialCount, 'Item count unchanged after reordering');
+
+  // Verify groupItemsByDay places it in the first day group
+  const dayGroups = groupItemsByDay(reorderedItems, '2028-03-10');
+  assert(dayGroups.length > 0, 'Day groups constructed');
+  assert(dayGroups[0].items.some((i) => i.id === transport!.id), 'Edited transport correctly placed in Day 1 group');
+
+  // 5.6 INVALID / MISSING ITEM ID HANDLING
+  const invalidResult = updateItem('non-existent-id-xyz', { title: 'Ghost Item' });
+  assert(invalidResult === undefined, 'updateItem with non-existent id returns undefined gracefully');
+  assert(getItems(tripId).length === initialCount, 'Store remains unaffected by invalid update attempt');
 
   // -------------------------------------------------------------------------
   // 6. DELETE Action Verification
@@ -133,9 +208,12 @@ export function runItemDetailWorkflowTests() {
   assert(deleteSuccess === true, 'deleteItem returns true upon success');
   assert(getItem(activity!.id) === undefined, 'Deleted activity item is no longer found in store');
   assert(
-    getItems(tripId).length === allSeedItems.length - 1,
+    getItems(tripId).length === initialCount - 1,
     'Store item count decremented by 1 after deletion'
   );
+  const remainingGroups = groupItemsByDay(getItems(tripId), '2028-03-10');
+  const allRemainingItemIds = remainingGroups.flatMap((g) => g.items.map((i) => i.id));
+  assert(!allRemainingItemIds.includes(activity!.id), 'Deleted item confirmed absent from timeline day groups');
 
   console.log('\n========================================');
   console.log('--- All Item Detail Workflow Tests Passed! ---');

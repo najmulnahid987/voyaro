@@ -49,6 +49,10 @@ export default function RootLayout() {
         {/* Global deep-link target: /itinerary/[itemId] */}
         <Stack.Screen name="itinerary" />
 
+        {/* ── Expense detail ─────────────────────────────────────────────── */}
+        {/* Global deep-link target: /expense/[expenseId] */}
+        <Stack.Screen name="expense" />
+
         {/* ── AI planner flow ────────────────────────────────────────────── */}
         <Stack.Screen
           name="ai"

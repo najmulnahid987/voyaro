@@ -1,21 +1,21 @@
+import React from 'react';
 import { useLocalSearchParams } from 'expo-router';
-import { PlaceholderScreen } from '@/components/dev/PlaceholderScreen';
+import { ExpenseDashboardView } from '@/components/expenses';
 
 /**
- * Route: /(tabs)/trips/[tripId]/expenses
- * Test with: /trips/demo-trip/expenses
+ * Route: /(tabs)/trips/[tripId]/expenses — Trip Expenses Dashboard (Phase 6)
+ *
+ * Displays financial health, budget progress, and chronological expenses
+ * for the currently selected trip only.
  */
 export default function TripExpensesScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
+
   return (
-    <PlaceholderScreen
-      route={`/trips/${tripId}/expenses`}
-      title="Expenses"
-      links={[
-        { label: 'Add Expense (modal)', href: '/modal/add-expense' },
-        { label: 'Split Expense (modal)', href: '/modal/expense-split' },
-        { label: '← Trip Overview', href: `/(tabs)/trips/${tripId}` },
-      ]}
+    <ExpenseDashboardView
+      tripId={tripId}
+      showHeader={false}
+      showSubTabs={false}
     />
   );
 }

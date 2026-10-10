@@ -28,10 +28,10 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
 import { ConcreteItineraryItem, HotelMetadata } from '@/types/itinerary';
-import { formatItineraryDate } from '@/utils/itineraryDateUtils';
+import { formatItineraryDate, parseDate } from '@/utils/itineraryDateUtils';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 
 // ---------------------------------------------------------------------------
@@ -40,9 +40,9 @@ import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 
 function calculateNights(inDateStr: string, outDateStr: string): number {
   try {
-    const d1 = new Date(inDateStr);
-    const d2 = new Date(outDateStr);
-    if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return 1;
+    const d1 = parseDate(inDateStr);
+    const d2 = parseDate(outDateStr);
+    if (!d1 || !d2) return 1;
     const diffMs = d2.getTime() - d1.getTime();
     const nights = Math.round(diffMs / (1000 * 60 * 60 * 24));
     return nights > 0 ? nights : 1;
@@ -93,10 +93,10 @@ export default function AddHotelScreen() {
   );
 
   const [checkInObj, setCheckInObj] = useState<Date>(
-    () => (existingItem?.startDateTime ? new Date(existingItem.startDateTime) : new Date('2028-03-11T15:00:00.000Z'))
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-11T15:00:00'))
   );
   const [checkOutObj, setCheckOutObj] = useState<Date>(
-    () => (existingItem?.endDateTime ? new Date(existingItem.endDateTime) : new Date('2028-03-14T11:00:00.000Z'))
+    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date('2028-03-14T11:00:00'))
   );
 
   const [confirmationNumber, setConfirmationNumber] = useState(
@@ -249,9 +249,13 @@ export default function AddHotelScreen() {
           {/* ── 1. Top Header ────────────────────────────────────────────── */}
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>Add hotel</Text>
+              <Text style={styles.headerTitle}>
+                {isEditMode ? 'Edit hotel' : 'Add hotel'}
+              </Text>
               <Text style={styles.headerSubtitle}>
-                Enter reservation details manually or review your stay.
+                {isEditMode
+                  ? 'Update reservation details, dates, or stay info.'
+                  : 'Enter reservation details manually or review your stay.'}
               </Text>
             </View>
 
@@ -547,10 +551,16 @@ export default function AddHotelScreen() {
                 isSubmitting && styles.buttonDisabled,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Add Hotel to Itinerary"
+              accessibilityLabel={isEditMode ? 'Save Changes' : 'Add Hotel to Itinerary'}
             >
               <Text style={styles.primarySubmitButtonText}>
-                {isSubmitting ? 'Adding Hotel...' : 'Add Hotel to Itinerary'}
+                {isSubmitting
+                  ? isEditMode
+                    ? 'Saving Changes...'
+                    : 'Adding Hotel...'
+                  : isEditMode
+                  ? 'Save Changes'
+                  : 'Add Hotel to Itinerary'}
               </Text>
             </Pressable>
 
@@ -684,7 +694,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputLabel: {
-    fontFamily: typography.label.fontFamily,
+    fontFamily: fontFamily.semiBold,
     fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
@@ -722,6 +732,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   errorText: {
+    fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.error,
     marginTop: spacing.xs,
@@ -877,6 +888,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.caption.fontFamily,
   },
   previewConfText: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '600',
     color: colors.textMuted,

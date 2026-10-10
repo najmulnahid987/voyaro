@@ -78,26 +78,19 @@ export default function TripOverviewScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: contentPaddingTop, paddingBottom: contentPaddingBottom },
+          { paddingTop: spacing.xs, paddingBottom: contentPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
-          {/* ── 1. Top Navigation & Hero Area ─────────────────────────────── */}
+          {/* ── 1. Destination Subtitle, Actions & Metrics ─────────────────── */}
           <View style={styles.heroWrapper}>
-            {/* Top Bar with Back, Share, Edit */}
+            {/* Subtitle & Quick Actions (Share, Edit) */}
             <View style={styles.topBar}>
-              <Pressable
-                onPress={handleBackPress}
-                style={({ pressed }) => [
-                  styles.glassButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Back to trips"
-              >
-                <Text style={styles.backArrowText}>←</Text>
-              </Pressable>
+              <Text style={styles.tripSubtitle}>
+                {trip.destination}{' '}
+                <Text style={styles.bulletDot}>·</Text> Mar 10 — 20
+              </Text>
 
               <View style={styles.topBarRight}>
                 <Pressable
@@ -124,17 +117,6 @@ export default function TripOverviewScreen() {
                   <View style={styles.pencilShape} />
                 </Pressable>
               </View>
-            </View>
-
-            {/* Trip Title & Destination Subtitle */}
-            <View style={styles.heroTextSection}>
-              <Text style={styles.tripTitle} numberOfLines={2}>
-                {trip.title}
-              </Text>
-              <Text style={styles.tripSubtitle}>
-                {trip.destination}{' '}
-                <Text style={styles.bulletDot}>·</Text> Mar 10 — 20
-              </Text>
             </View>
 
             {/* Horizontal Metric Pills Scroll */}

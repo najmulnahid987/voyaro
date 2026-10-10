@@ -28,10 +28,11 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { addItem } from '@/services/itineraryStore';
-import { ConcreteItineraryItem } from '@/types/itinerary';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
+import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { ActivityMetadata, ConcreteItineraryItem } from '@/types/itinerary';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { parseDate } from '@/utils/itineraryDateUtils';
 
 // ---------------------------------------------------------------------------
 // Category Definitions & Icon Mapping
@@ -92,24 +93,49 @@ function toDateKey(date: Date): string {
 }
 
 export default function AddActivityScreen() {
-  const { tripId } = useLocalSearchParams<{ tripId?: string }>();
+  const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
+
+  const existingItem = useMemo(() => {
+    return itemId ? getItem(itemId) : undefined;
+  }, [itemId]);
+
+  const isEditMode = Boolean(existingItem && existingItem.type === 'activity');
+  const activityMeta = isEditMode ? (existingItem?.metadata as ActivityMetadata) : undefined;
 
   // -------------------------------------------------------------------------
   // Form State
   // -------------------------------------------------------------------------
-  const [activityName, setActivityName] = useState('Shibuya Crossing & Hachiko Tour');
-  const [location, setLocation] = useState('Shibuya, Tokyo');
-  const [category, setCategory] = useState<ActivityCategory>('Culture');
+  const [activityName, setActivityName] = useState(
+    () => existingItem?.title || (isEditMode ? '' : 'Shibuya Crossing & Hachiko Tour')
+  );
+  const [location, setLocation] = useState(
+    () => existingItem?.location || (isEditMode ? '' : 'Shibuya, Tokyo')
+  );
+  const [category, setCategory] = useState<ActivityCategory>(
+    () => (activityMeta?.category as ActivityCategory) || 'Culture'
+  );
 
-  const [date, setDate] = useState<Date>(new Date('2028-03-12T14:00:00.000Z'));
-  const [startTime, setStartTime] = useState<Date>(new Date('2028-03-12T14:00:00.000Z'));
-  const [endTime, setEndTime] = useState<Date | null>(new Date('2028-03-12T16:00:00.000Z'));
+  const [date, setDate] = useState<Date>(
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T14:00:00'))
+  );
+  const [startTime, setStartTime] = useState<Date>(
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T14:00:00'))
+  );
+  const [endTime, setEndTime] = useState<Date | null>(
+    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) : isEditMode ? null : new Date('2028-03-12T16:00:00'))
+  );
 
-  const [website, setWebsite] = useState('https://tokyowalkingtours.jp');
-  const [ticketInfo, setTicketInfo] = useState('Mobile QR Voucher (2 Adults)');
-  const [notes, setNotes] = useState('Meet local guide near Hachiko Statue exit. Comfortable walking shoes recommended.');
+  const [website, setWebsite] = useState(
+    () => activityMeta?.website || (isEditMode ? '' : 'https://tokyowalkingtours.jp')
+  );
+  const [ticketInfo, setTicketInfo] = useState(
+    () => activityMeta?.ticketInformation || (isEditMode ? '' : 'Mobile QR Voucher (2 Adults)')
+  );
+  const [notes, setNotes] = useState(
+    () => existingItem?.notes || (isEditMode ? '' : 'Meet local guide near Hachiko Statue exit. Comfortable walking shoes recommended.')
+  );
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -148,30 +174,47 @@ export default function AddActivityScreen() {
       const startIso = `${dateStr}T${startTimeStr}:00.000Z`;
       const endIso = endTime ? `${dateStr}T${toTimeKey(endTime)}:00.000Z` : undefined;
 
-      // 2. Build Typed Concrete Activity Item
-      const newActivity: ConcreteItineraryItem = {
-        id: `itin-act-${Date.now()}`,
-        tripId: effectiveTripId,
-        type: 'activity',
-        title: activityName.trim(),
-        startDateTime: startIso,
-        endDateTime: endIso,
-        location: location.trim() || undefined,
-        notes: notes.trim() || undefined,
-        confirmationNumber: undefined,
-        metadata: {
-          category: category,
-          website: website.trim() || undefined,
-          ticketInformation: ticketInfo.trim() || undefined,
-          duration: endTime ? `${startTimeStr} - ${toTimeKey(endTime)}` : undefined,
-          meetingPoint: location.trim() || undefined,
-        },
-      };
+      // 2. Add or Update in In-Memory Store
+      if (isEditMode && itemId) {
+        updateItem(itemId, {
+          title: activityName.trim(),
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: location.trim() || undefined,
+          notes: notes.trim() || undefined,
+          metadata: {
+            ...activityMeta,
+            category: category,
+            website: website.trim() || undefined,
+            ticketInformation: ticketInfo.trim() || undefined,
+            duration: endTime ? `${startTimeStr} - ${toTimeKey(endTime)}` : activityMeta?.duration,
+            meetingPoint: location.trim() || undefined,
+          },
+        });
+      } else {
+        const newActivity: ConcreteItineraryItem = {
+          id: `itin-act-${Date.now()}`,
+          tripId: effectiveTripId,
+          type: 'activity',
+          title: activityName.trim(),
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: location.trim() || undefined,
+          notes: notes.trim() || undefined,
+          confirmationNumber: undefined,
+          metadata: {
+            category: category,
+            website: website.trim() || undefined,
+            ticketInformation: ticketInfo.trim() || undefined,
+            duration: endTime ? `${startTimeStr} - ${toTimeKey(endTime)}` : undefined,
+            meetingPoint: location.trim() || undefined,
+          },
+        };
 
-      // 3. Add to In-Memory Store
-      addItem(newActivity);
+        addItem(newActivity);
+      }
 
-      // 4. Return to Itinerary Timeline
+      // 3. Return to previous screen (Details or Timeline)
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -219,9 +262,13 @@ export default function AddActivityScreen() {
           {/* ── 1. Top Header ────────────────────────────────────────────── */}
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>Add activity</Text>
+              <Text style={styles.headerTitle}>
+                {isEditMode ? 'Edit activity' : 'Add activity'}
+              </Text>
               <Text style={styles.headerSubtitle}>
-                Enter details manually or plan your exploration.
+                {isEditMode
+                  ? 'Update details, schedule, or notes.'
+                  : 'Enter details manually or plan your exploration.'}
               </Text>
             </View>
 
@@ -530,10 +577,16 @@ export default function AddActivityScreen() {
                 isSubmitting && styles.buttonDisabled,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Add to itinerary"
+              accessibilityLabel={isEditMode ? 'Save Changes' : 'Add to itinerary'}
             >
               <Text style={styles.primarySubmitButtonText}>
-                {isSubmitting ? 'Adding Activity...' : 'Add to itinerary'}
+                {isSubmitting
+                  ? isEditMode
+                    ? 'Saving Changes...'
+                    : 'Adding Activity...'
+                  : isEditMode
+                  ? 'Save Changes'
+                  : 'Add to itinerary'}
               </Text>
             </Pressable>
 
@@ -667,13 +720,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputLabel: {
-    fontFamily: typography.label.fontFamily,
+    fontFamily: fontFamily.semiBold,
     fontSize: 12,
     fontWeight: '600',
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
   optionalLabel: {
+    fontFamily: fontFamily.regular,
     fontWeight: '400',
     color: colors.textMuted,
   },
@@ -707,6 +761,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   errorText: {
+    fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.error,
     marginTop: spacing.xs,
@@ -746,6 +801,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   categoryPillTextActive: {
+    fontFamily: fontFamily.semiBold,
     color: colors.textOnPrimary,
     fontWeight: '600',
   },

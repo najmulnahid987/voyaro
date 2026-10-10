@@ -20,7 +20,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { formatItineraryTime } from '@/utils/itineraryDateUtils';
 import {
   ActivityMetadata,
@@ -248,6 +248,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   categoryLabel: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -310,6 +311,7 @@ const styles = StyleSheet.create({
     marginLeft: spacing.sm,
   },
   confirmationBadgeText: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 10,
     fontWeight: '600',
     color: colors.primary,

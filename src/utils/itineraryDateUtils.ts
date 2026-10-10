@@ -49,10 +49,24 @@ const DAY_NAMES_FULL = [
 ];
 
 /**
- * Safely parse an ISO date-time string into a Date object.
+ * Safely parse an ISO date-time string into a Date object representing
+ * the exact calendar/wall-clock date and time without timezone drift.
  */
 export function parseDate(isoString?: string | null): Date | null {
   if (!isoString) return null;
+  const match = String(isoString).match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/
+  );
+  if (match) {
+    const year = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    const day = parseInt(match[3], 10);
+    const hours = match[4] ? parseInt(match[4], 10) : 0;
+    const minutes = match[5] ? parseInt(match[5], 10) : 0;
+    const seconds = match[6] ? parseInt(match[6], 10) : 0;
+    const d = new Date(year, month, day, hours, minutes, seconds);
+    return isNaN(d.getTime()) ? null : d;
+  }
   const d = new Date(isoString);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -79,8 +93,8 @@ export function sortItineraryItems<T extends { startDateTime: string; endDateTim
   if (!items || items.length === 0) return [];
 
   return [...items].sort((a, b) => {
-    const timeA = new Date(a.startDateTime).getTime();
-    const timeB = new Date(b.startDateTime).getTime();
+    const timeA = parseDate(a.startDateTime)?.getTime() ?? 0;
+    const timeB = parseDate(b.startDateTime)?.getTime() ?? 0;
 
     if (timeA !== timeB) {
       return timeA - timeB;
@@ -88,8 +102,8 @@ export function sortItineraryItems<T extends { startDateTime: string; endDateTim
 
     // Secondary sort: endDateTime if available
     if (a.endDateTime && b.endDateTime) {
-      const endTimeA = new Date(a.endDateTime).getTime();
-      const endTimeB = new Date(b.endDateTime).getTime();
+      const endTimeA = parseDate(a.endDateTime)?.getTime() ?? 0;
+      const endTimeB = parseDate(b.endDateTime)?.getTime() ?? 0;
       if (endTimeA !== endTimeB) {
         return endTimeA - endTimeB;
       }

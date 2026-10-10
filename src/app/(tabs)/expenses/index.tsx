@@ -1,13 +1,17 @@
-import { PlaceholderScreen } from '@/components/dev/PlaceholderScreen';
+import React from 'react';
+import { ExpenseDashboardView } from '@/components/expenses';
+
+/**
+ * Route: /(tabs)/expenses — Main Expenses Tab (Phase 6)
+ *
+ * Persistent navigation shell entry for trip expenses.
+ * Allows switching between trips while maintaining strict trip-scoped financial isolation.
+ */
 export default function ExpensesScreen() {
   return (
-    <PlaceholderScreen
-      route="/(tabs)/expenses"
-      title="Expenses"
-      links={[
-        { label: 'Add Expense (modal)', href: '/modal/add-expense' },
-        { label: 'Split Expense (modal)', href: '/modal/expense-split' },
-      ]}
+    <ExpenseDashboardView
+      showTripSelector={true}
+      showSubTabs={false}
     />
   );
 }

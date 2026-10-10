@@ -15,21 +15,18 @@
 
 import React, { useMemo, useState } from 'react';
 import {
-  Alert,
-  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { deleteItem, updateItem, useItineraryItem } from '@/services/itineraryStore';
 import {
   ActivityMetadata,
@@ -79,10 +76,11 @@ export default function ItineraryItemDetailScreen() {
   };
 
   const handleConfirmDelete = () => {
-    if (!itemId) return;
+    if (!item || !itemId) return;
+    const targetTripId = item.tripId || 'japan-adventure';
     deleteItem(itemId);
     setShowDeleteConfirm(false);
-    handleBack();
+    router.replace(`/(tabs)/trips/${targetTripId}/itinerary` as any);
   };
 
   // ---------------------------------------------------------------------------
@@ -792,232 +790,6 @@ function DetailGridTile({
 
 
 
-  // Type-specific edit fields
-  const [seat, setSeat] = useState(
-    (item.metadata as FlightMetadata | TransportationMetadata)?.seat || ''
-  );
-  const [room, setRoom] = useState((item.metadata as HotelMetadata)?.room || '');
-  const [guestName, setGuestName] = useState(
-    (item.metadata as HotelMetadata)?.guestName || ''
-  );
-  const [gate, setGate] = useState((item.metadata as FlightMetadata)?.gate || '');
-  const [terminal, setTerminal] = useState(
-    (item.metadata as FlightMetadata)?.terminal || ''
-  );
-
-  const handleSave = () => {
-    if (!title.trim()) {
-      Alert.alert('Title Required', 'Please provide a title for this item.');
-      return;
-    }
-
-    // Build changes payload
-    const updatedMetadata = {
-      ...(item.metadata as any),
-      ...(item.type === 'flight'
-        ? {
-            seat: seat.trim() || undefined,
-            gate: gate.trim() || undefined,
-            terminal: terminal.trim() || undefined,
-          }
-        : {}),
-      ...(item.type === 'hotel'
-        ? {
-            room: room.trim() || undefined,
-            guestName: guestName.trim() || undefined,
-          }
-        : {}),
-      ...(item.type === 'transportation'
-        ? {
-            seat: seat.trim() || undefined,
-          }
-        : {}),
-    };
-
-    updateItem(item.id, {
-      title: title.trim(),
-      location: location.trim() || undefined,
-      confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
-      notes: notes.trim() || undefined,
-      metadata: updatedMetadata,
-    });
-
-    onClose();
-  };
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <KeyboardAvoidingView
-        style={styles.modalScreen}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        {/* Modal Top Bar */}
-        <View
-          style={[
-            styles.modalHeader,
-            {
-              paddingTop: Math.max(insets.top, 16),
-            },
-          ]}
-        >
-          <Pressable
-            onPress={onClose}
-            style={({ pressed }) => [
-              styles.modalCloseButton,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <Text style={styles.modalCancelText}>Cancel</Text>
-          </Pressable>
-
-          <Text style={styles.modalHeaderTitle}>Edit Reservation</Text>
-
-          <Pressable
-            onPress={handleSave}
-            style={({ pressed }) => [
-              styles.modalSaveButton,
-              pressed && styles.buttonPressed,
-            ]}
-          >
-            <Text style={styles.modalSaveText}>Save</Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          style={styles.modalBody}
-          contentContainerStyle={[
-            styles.modalContent,
-            { paddingBottom: insets.bottom + 32 },
-          ]}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Title input */}
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Title *</Text>
-            <TextInput
-              style={styles.formInput}
-              value={title}
-              onChangeText={setTitle}
-              placeholder="Reservation title"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-
-          {/* Location input */}
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Location / Route</Text>
-            <TextInput
-              style={styles.formInput}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g. Kyoto Station, Tokyo"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
-
-          {/* Confirmation Number */}
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Confirmation / Reference Code</Text>
-            <TextInput
-              style={[styles.formInput, styles.uppercaseInput]}
-              value={confirmationNumber}
-              onChangeText={setConfirmationNumber}
-              placeholder="e.g. EK-982134"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="characters"
-            />
-          </View>
-
-          {/* Type-specific inputs */}
-          {item.type === 'flight' && (
-            <View style={styles.twoColumnRow}>
-              <View style={styles.flexColumn}>
-                <Text style={styles.formLabel}>Seat</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={seat}
-                  onChangeText={setSeat}
-                  placeholder="e.g. 14A"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={styles.flexColumn}>
-                <Text style={styles.formLabel}>Gate</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={gate}
-                  onChangeText={setGate}
-                  placeholder="e.g. 12"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-            </View>
-          )}
-
-          {item.type === 'hotel' && (
-            <View style={styles.twoColumnRow}>
-              <View style={styles.flexColumn}>
-                <Text style={styles.formLabel}>Room / Suite</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={room}
-                  onChangeText={setRoom}
-                  placeholder="e.g. Suite 408"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={styles.flexColumn}>
-                <Text style={styles.formLabel}>Guest Name</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={guestName}
-                  onChangeText={setGuestName}
-                  placeholder="e.g. Alex & Sarah"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-            </View>
-          )}
-
-          {item.type === 'transportation' && (
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Seat / Car</Text>
-              <TextInput
-                style={styles.formInput}
-                value={seat}
-                onChangeText={setSeat}
-                placeholder="e.g. Car 5, Seat 12E"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          )}
-
-          {/* Notes multiline input */}
-          <View style={styles.formGroup}>
-            <Text style={styles.formLabel}>Notes</Text>
-            <TextInput
-              style={[styles.formInput, styles.multilineInput]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Add special requests, instructions or reminders..."
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
 // ===========================================================================
 // MODAL: Delete Confirmation
 // ===========================================================================
@@ -1051,10 +823,10 @@ function DeleteConfirmModal({
             />
           </View>
 
-          <Text style={styles.dialogTitle}>Delete Reservation</Text>
+          <Text style={styles.dialogTitle}>Delete this itinerary item?</Text>
           <Text style={styles.dialogSubtitle}>
-            Are you sure you want to remove &ldquo;{itemTitle}&rdquo; from your
-            itinerary? This action cannot be undone.
+            Are you sure? &ldquo;{itemTitle}&rdquo; will be permanently removed
+            from your itinerary.
           </Text>
 
           <View style={styles.dialogButtonRow}>
@@ -1183,6 +955,7 @@ const styles = StyleSheet.create({
     height: 14,
   },
   categoryBadgeText: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '700',
     color: colors.primary,
@@ -1194,7 +967,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundAlt,
     paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: radius.button,
+    borderRadius: radius.full,
     gap: 4,
   },
   confirmationPillIcon: {
@@ -1202,6 +975,7 @@ const styles = StyleSheet.create({
     height: 12,
   },
   confirmationPillText: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '700',
     color: colors.textSecondary,
@@ -1242,6 +1016,7 @@ const styles = StyleSheet.create({
   },
   heroDateTimeText: {
     ...typography.bodySecondary,
+    fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -1280,23 +1055,27 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   airportCode: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 26,
     fontWeight: '900',
     color: colors.textPrimary,
     letterSpacing: 0.5,
   },
   cityName: {
+    fontFamily: fontFamily.regular,
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 2,
   },
   scheduleTime: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 16,
     fontWeight: '700',
     color: colors.primary,
     marginTop: 6,
   },
   scheduleDate: {
+    fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 1,
@@ -1352,6 +1131,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   gridTileLabel: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
@@ -1362,6 +1142,7 @@ const styles = StyleSheet.create({
     height: 13,
   },
   gridTileValue: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary,
@@ -1394,6 +1175,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   hotelAddressText: {
+    fontFamily: fontFamily.regular,
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 2,
@@ -1413,6 +1195,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   checkDateLabel: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 10,
     fontWeight: '800',
     color: colors.primary,
@@ -1420,17 +1203,20 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   checkDateValue: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 18,
     fontWeight: '800',
     color: colors.textPrimary,
   },
   checkTimeValue: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
     marginTop: 2,
   },
   checkSubDate: {
+    fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 2,
@@ -1462,6 +1248,7 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
   activityLocationText: {
+    fontFamily: fontFamily.regular,
     fontSize: 13,
     color: colors.textSecondary,
     marginTop: 2,
@@ -1481,18 +1268,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   extraInfoLabel: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 13,
     fontWeight: '600',
     color: colors.textSecondary,
     width: 100,
   },
   extraInfoValue: {
+    fontFamily: fontFamily.regular,
     fontSize: 13,
     color: colors.textPrimary,
     flex: 1,
     textAlign: 'right',
   },
   linkText: {
+    fontFamily: fontFamily.medium,
     color: colors.primary,
     textDecorationLine: 'underline',
   },
@@ -1533,18 +1323,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   transportNodeLabel: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
     letterSpacing: 0.6,
   },
   transportNodeValue: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
     marginTop: 1,
   },
   transportNodeTime: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 13,
     fontWeight: '600',
     color: colors.primary,
@@ -1610,85 +1403,7 @@ const styles = StyleSheet.create({
     minWidth: 180,
   },
 
-  // ── Modals & Dialogs ────────────────────────────────────────────────────
-  modalScreen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  modalHeaderTitle: {
-    ...typography.cardTitle,
-    color: colors.textPrimary,
-  },
-  modalCloseButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-  },
-  modalCancelText: {
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  modalSaveButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: colors.primary,
-    borderRadius: radius.full,
-  },
-  modalSaveText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: colors.textOnPrimary,
-  },
-  modalBody: {
-    flex: 1,
-  },
-  modalContent: {
-    padding: spacing.lg,
-  },
-  formGroup: {
-    marginBottom: spacing.md,
-  },
-  formLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textSecondary,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  formInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  uppercaseInput: {
-    textTransform: 'uppercase',
-  },
-  multilineInput: {
-    minHeight: 100,
-  },
-  twoColumnRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  flexColumn: {
-    flex: 1,
-  },
+
 
   // Delete Confirm Dialog
   dialogOverlay: {

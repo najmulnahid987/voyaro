@@ -29,10 +29,11 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { addItem } from '@/services/itineraryStore';
-import { ConcreteItineraryItem, TransportationType } from '@/types/itinerary';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
+import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { ConcreteItineraryItem, TransportationMetadata, TransportationType } from '@/types/itinerary';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { isMultiDayItem, parseDate } from '@/utils/itineraryDateUtils';
 
 // ---------------------------------------------------------------------------
 // 1. Types and Option Definitions
@@ -108,27 +109,57 @@ function formatTime12h(time24: string): string {
 // ---------------------------------------------------------------------------
 
 export default function AddTransportationScreen() {
-  const { tripId } = useLocalSearchParams<{ tripId?: string }>();
+  const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
+
+  const existingItem = useMemo(() => {
+    return itemId ? getItem(itemId) : undefined;
+  }, [itemId]);
+
+  const isEditMode = Boolean(existingItem && existingItem.type === 'transportation');
+  const transMeta = isEditMode ? (existingItem?.metadata as TransportationMetadata) : undefined;
 
   // -------------------------------------------------------------------------
   // Form State
   // -------------------------------------------------------------------------
-  const [selectedType, setSelectedType] = useState<TransportationType>('train');
-  const [fromLocation, setFromLocation] = useState('Tokyo Station');
-  const [toLocation, setToLocation] = useState('Kyoto Station');
-  const [providerRoute, setProviderRoute] = useState('Tokaido Shinkansen');
+  const [selectedType, setSelectedType] = useState<TransportationType>(
+    () => transMeta?.transportationType || 'train'
+  );
+  const [fromLocation, setFromLocation] = useState(
+    () => transMeta?.from || (isEditMode ? '' : 'Tokyo Station')
+  );
+  const [toLocation, setToLocation] = useState(
+    () => transMeta?.to || (isEditMode ? '' : 'Kyoto Station')
+  );
+  const [providerRoute, setProviderRoute] = useState(
+    () => transMeta?.provider || (isEditMode ? '' : 'Tokaido Shinkansen')
+  );
 
-  const [dateObj, setDateObj] = useState<Date>(new Date('2028-03-12T09:00:00.000Z'));
-  const [departureTimeObj, setDepartureTimeObj] = useState<Date>(new Date('2028-03-12T09:00:00.000Z'));
-  const [arrivalTimeObj, setArrivalTimeObj] = useState<Date>(new Date('2028-03-12T11:20:00.000Z'));
-  const [isOvernight, setIsOvernight] = useState(false);
+  const [dateObj, setDateObj] = useState<Date>(
+    () => existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T09:00:00')
+  );
+  const [departureTimeObj, setDepartureTimeObj] = useState<Date>(
+    () => existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T09:00:00')
+  );
+  const [arrivalTimeObj, setArrivalTimeObj] = useState<Date>(
+    () => existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date('2028-03-12T11:20:00')
+  );
+  const [isOvernight, setIsOvernight] = useState(() => {
+    if (existingItem?.startDateTime && existingItem?.endDateTime) {
+      return isMultiDayItem(existingItem.startDateTime, existingItem.endDateTime);
+    }
+    return false;
+  });
 
-  const [bookingNumber, setBookingNumber] = useState('JR-784920');
-  const [seat, setSeat] = useState('Car 5, Seat 12-A');
+  const [bookingNumber, setBookingNumber] = useState(
+    () => transMeta?.bookingNumber || existingItem?.confirmationNumber || (isEditMode ? '' : 'JR-784920')
+  );
+  const [seat, setSeat] = useState(
+    () => transMeta?.seat || (isEditMode ? '' : 'Car 5, Seat 12-A')
+  );
   const [notes, setNotes] = useState(
-    'Mount Fuji view on the right side of the train (seats D/E). Luggage area reserved behind row 12.'
+    () => existingItem?.notes || (isEditMode ? '' : 'Mount Fuji view on the right side of the train (seats D/E). Luggage area reserved behind row 12.')
   );
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -210,33 +241,54 @@ export default function AddTransportationScreen() {
         ? `${modeLabel}: ${providerRoute.trim()}`
         : `${modeLabel} (${fromLocation.trim()} → ${toLocation.trim()})`;
 
-      // 3. Create Typed Concrete Transportation Item
-      const newTransportItem: ConcreteItineraryItem = {
-        id: `itin-trans-${Date.now()}`,
-        tripId: effectiveTripId,
-        type: 'transportation',
-        title,
-        startDateTime: startIso,
-        endDateTime: endIso,
-        location: `${fromLocation.trim()} → ${toLocation.trim()}`,
-        notes: notes.trim() || undefined,
-        confirmationNumber: bookingNumber.trim() || undefined,
-        metadata: {
-          transportationType: selectedType,
-          from: fromLocation.trim(),
-          to: toLocation.trim(),
-          bookingNumber: bookingNumber.trim() || undefined,
-          seat: seat.trim() || undefined,
-          provider: providerRoute.trim() || undefined,
-          pickupTime: depTimeStr || undefined,
-          dropoffTime: arrTimeStr || undefined,
-        },
-      };
+      // 3. Add or Update in In-Memory Store
+      if (isEditMode && itemId) {
+        updateItem(itemId, {
+          title,
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: `${fromLocation.trim()} → ${toLocation.trim()}`,
+          notes: notes.trim() || undefined,
+          confirmationNumber: bookingNumber.trim() || undefined,
+          metadata: {
+            ...transMeta,
+            transportationType: selectedType,
+            from: fromLocation.trim(),
+            to: toLocation.trim(),
+            bookingNumber: bookingNumber.trim() || undefined,
+            seat: seat.trim() || undefined,
+            provider: providerRoute.trim() || undefined,
+            pickupTime: depTimeStr || undefined,
+            dropoffTime: arrTimeStr || undefined,
+          },
+        });
+      } else {
+        const newTransportItem: ConcreteItineraryItem = {
+          id: `itin-trans-${Date.now()}`,
+          tripId: effectiveTripId,
+          type: 'transportation',
+          title,
+          startDateTime: startIso,
+          endDateTime: endIso,
+          location: `${fromLocation.trim()} → ${toLocation.trim()}`,
+          notes: notes.trim() || undefined,
+          confirmationNumber: bookingNumber.trim() || undefined,
+          metadata: {
+            transportationType: selectedType,
+            from: fromLocation.trim(),
+            to: toLocation.trim(),
+            bookingNumber: bookingNumber.trim() || undefined,
+            seat: seat.trim() || undefined,
+            provider: providerRoute.trim() || undefined,
+            pickupTime: depTimeStr || undefined,
+            dropoffTime: arrTimeStr || undefined,
+          },
+        };
 
-      // 4. Add to Central In-Memory Itinerary Store
-      addItem(newTransportItem);
+        addItem(newTransportItem);
+      }
 
-      // 5. Navigate back to Itinerary Timeline
+      // 4. Return to previous screen (Details or Timeline)
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -269,9 +321,13 @@ export default function AddTransportationScreen() {
           {/* ── Top Header ────────────────────────────────────────────── */}
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>Add transportation</Text>
+              <Text style={styles.headerTitle}>
+                {isEditMode ? 'Edit transportation' : 'Add transportation'}
+              </Text>
               <Text style={styles.headerSubtitle}>
-                Enter details for a train, bus, car, or transfer segment.
+                {isEditMode
+                  ? 'Update route, schedule, or seat details.'
+                  : 'Enter details for a train, bus, car, or transfer segment.'}
               </Text>
             </View>
 
@@ -673,10 +729,16 @@ export default function AddTransportationScreen() {
                 isSubmitting && styles.buttonDisabled,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Add Transportation to Itinerary"
+              accessibilityLabel={isEditMode ? 'Save Changes' : 'Add Transportation to Itinerary'}
             >
               <Text style={styles.submitButtonText}>
-                {isSubmitting ? 'Adding Transportation...' : 'Add Transportation to Itinerary'}
+                {isSubmitting
+                  ? isEditMode
+                    ? 'Saving Changes...'
+                    : 'Adding Transportation...'
+                  : isEditMode
+                  ? 'Save Changes'
+                  : 'Add Transportation to Itinerary'}
               </Text>
             </Pressable>
 
@@ -851,6 +913,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   modeLabelSelected: {
+    fontFamily: fontFamily.semiBold,
     color: colors.primary,
     fontWeight: '600',
   },
@@ -984,6 +1047,7 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   errorText: {
+    fontFamily: fontFamily.regular,
     fontSize: 12,
     color: colors.error,
     marginTop: spacing.xs,
@@ -992,7 +1056,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   fieldLabel: {
-    fontFamily: typography.label.fontFamily,
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.4,

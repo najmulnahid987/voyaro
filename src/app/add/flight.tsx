@@ -33,6 +33,7 @@ import { addItem, getItem, updateItem } from '@/services/itineraryStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConcreteItineraryItem, FlightMetadata } from '@/types/itinerary';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { parseDate } from '@/utils/itineraryDateUtils';
 
 // ---------------------------------------------------------------------------
 // Mock Airport Lookup Helper
@@ -95,22 +96,22 @@ export default function AddFlightScreen() {
   // -------------------------------------------------------------------------
   // Form State
   // -------------------------------------------------------------------------
-  const [airline, setAirline] = useState(() => flightMeta?.airline || 'Emirates');
-  const [flightNumber, setFlightNumber] = useState(() => flightMeta?.flightNumber || 'EK585');
+  const [airline, setAirline] = useState(() => flightMeta?.airline || (isEditMode ? '' : 'Emirates'));
+  const [flightNumber, setFlightNumber] = useState(() => flightMeta?.flightNumber || (isEditMode ? '' : 'EK585'));
   const [departureAirport, setDepartureAirport] = useState(
-    () => flightMeta?.departureCity || flightMeta?.departureAirport || 'Dhaka, Bangladesh'
+    () => flightMeta?.departureCity || flightMeta?.departureAirport || (isEditMode ? '' : 'Dhaka, Bangladesh')
   );
-  const [departureCode, setDepartureCode] = useState(() => flightMeta?.departureAirport || 'DAC');
+  const [departureCode, setDepartureCode] = useState(() => flightMeta?.departureAirport || (isEditMode ? '' : 'DAC'));
   const [arrivalAirport, setArrivalAirport] = useState(
-    () => flightMeta?.arrivalCity || flightMeta?.arrivalAirport || 'Tokyo, Japan'
+    () => flightMeta?.arrivalCity || flightMeta?.arrivalAirport || (isEditMode ? '' : 'Tokyo, Japan')
   );
-  const [arrivalCode, setArrivalCode] = useState(() => flightMeta?.arrivalAirport || 'NRT');
+  const [arrivalCode, setArrivalCode] = useState(() => flightMeta?.arrivalAirport || (isEditMode ? '' : 'NRT'));
 
   const [departureDateObj, setDepartureDateObj] = useState<Date>(
-    () => (existingItem?.startDateTime ? new Date(existingItem.startDateTime) : new Date('2028-03-10T20:30:00.000Z'))
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-10T20:30:00'))
   );
   const [arrivalDateObj, setArrivalDateObj] = useState<Date>(
-    () => (existingItem?.endDateTime ? new Date(existingItem.endDateTime) : new Date('2028-03-11T11:15:00.000Z'))
+    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date('2028-03-11T11:15:00'))
   );
 
   const [terminal, setTerminal] = useState(() => flightMeta?.terminal || (isEditMode ? '' : '1'));
@@ -1318,13 +1319,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   submitButton: {
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
     backgroundColor: colors.primary,
-    paddingVertical: spacing.md + 2,
-    borderRadius: radius.card,
+    borderRadius: radius.button,
     ...shadows.float,
   },
   submitButtonIcon: {
@@ -1340,10 +1341,11 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
   },
   cancelButton: {
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.card,
+    borderRadius: radius.button,
+    backgroundColor: colors.transparent,
   },
   cancelButtonText: {
     fontFamily: typography.label.fontFamily,

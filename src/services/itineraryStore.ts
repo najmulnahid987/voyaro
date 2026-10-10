@@ -23,6 +23,7 @@ import {
   ItineraryItem,
   UpdateItineraryItemInput,
 } from '@/types/itinerary';
+import { sortItineraryItems } from '../utils/itineraryDateUtils';
 
 // ---------------------------------------------------------------------------
 // 1. Initial Multi-Date Realistic Seed Data for Demo Trip
@@ -178,12 +179,7 @@ function normalizeTripId(tripId?: string): string {
  */
 export function getItems(tripId?: string): ConcreteItineraryItem[] {
   const normalized = normalizeTripId(tripId);
-  return itemsStore
-    .filter((item) => item.tripId === normalized)
-    .sort(
-      (a, b) =>
-        new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime()
-    );
+  return sortItineraryItems(itemsStore.filter((item) => item.tripId === normalized));
 }
 
 /**
@@ -321,12 +317,9 @@ export function useItinerary(tripId?: string) {
   );
 
   const normalized = normalizeTripId(tripId);
-  const items = allItems
-    .filter((item) => item.tripId === normalized)
-    .sort(
-      (a, b) =>
-        new Date(a.startDateTime).getTime() - new Date(b.startDateTime).getTime()
-    );
+  const items = sortItineraryItems(
+    allItems.filter((item) => item.tripId === normalized)
+  );
 
   return {
     items,

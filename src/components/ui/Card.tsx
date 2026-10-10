@@ -60,8 +60,21 @@ export function Card({
     style,
   ];
 
+  const flattenedStyle = StyleSheet.flatten(style);
+  const hasCustomPadding =
+    flattenedStyle &&
+    (flattenedStyle.padding !== undefined ||
+      flattenedStyle.paddingHorizontal !== undefined ||
+      flattenedStyle.paddingVertical !== undefined ||
+      flattenedStyle.paddingTop !== undefined ||
+      flattenedStyle.paddingBottom !== undefined ||
+      flattenedStyle.paddingLeft !== undefined ||
+      flattenedStyle.paddingRight !== undefined);
+
   const inner = (
-    <View style={[styles.content, contentStyle]}>{children}</View>
+    <View style={[!hasCustomPadding && styles.content, contentStyle]}>
+      {children}
+    </View>
   );
 
   if (variant === 'interactive' && onPress) {

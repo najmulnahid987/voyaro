@@ -9,12 +9,13 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { getTripById } from '@/services/mockData';
 import { useItinerary } from '@/services/itineraryStore';
 import {
   formatItineraryTime,
   groupItemsByDay,
+  parseDate,
 } from '@/utils/itineraryDateUtils';
 import { useShellInsets } from '@/components/navigation';
 import {
@@ -73,7 +74,7 @@ export default function TripItineraryScreen() {
   };
 
   const handleAddPress = () => {
-    router.push('/add');
+    router.push({ pathname: '/add', params: { tripId: effectiveTripId } });
   };
 
   // 4. Helper to get category label from item
@@ -149,108 +150,12 @@ export default function TripItineraryScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: contentPaddingTop, paddingBottom: contentPaddingBottom },
+          { paddingTop: spacing.xs, paddingBottom: contentPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
-          {/* ── 1. Top Header & Title ────────────────────────────────────── */}
-          <View style={styles.headerSection}>
-            <View style={styles.topBarRow}>
-              <Pressable
-                onPress={handleBackPress}
-                style={({ pressed }) => [
-                  styles.glassButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-              >
-                <Text style={styles.backArrowText}>←</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={handleAddPress}
-                style={({ pressed }) => [
-                  styles.addIconButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Add reservation"
-              >
-                <Image
-                  source={require('@/assets/images/icons/plus.svg')}
-                  style={styles.plusIcon}
-                  tintColor={colors.textOnPrimary}
-                  contentFit="contain"
-                />
-              </Pressable>
-            </View>
-
-            <Text style={styles.tripTitle} numberOfLines={2}>
-              {trip.title}
-            </Text>
-
-            {/* ── 2. Scrollable Sub-Navigation Tabs ────────────────────────── */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.tabsScrollContent}
-              style={styles.tabsScrollView}
-            >
-              <Pressable
-                onPress={() => handleTabPress(`/(tabs)/trips/${trip.id}`)}
-                style={({ pressed }) => [
-                  styles.tabButton,
-                  pressed && styles.tabButtonPressed,
-                ]}
-              >
-                <Text style={styles.tabButtonText}>Overview</Text>
-              </Pressable>
-
-              <View style={[styles.tabButton, styles.tabButtonActive]}>
-                <Text style={[styles.tabButtonText, styles.tabButtonTextActive]}>
-                  Itinerary
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => handleTabPress(`/(tabs)/trips/${trip.id}/map`)}
-                style={({ pressed }) => [
-                  styles.tabButton,
-                  pressed && styles.tabButtonPressed,
-                ]}
-              >
-                <Text style={styles.tabButtonText}>Map</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  handleTabPress(`/(tabs)/trips/${trip.id}/expenses`)
-                }
-                style={({ pressed }) => [
-                  styles.tabButton,
-                  pressed && styles.tabButtonPressed,
-                ]}
-              >
-                <Text style={styles.tabButtonText}>Expenses</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() =>
-                  handleTabPress(`/(tabs)/trips/${trip.id}/documents`)
-                }
-                style={({ pressed }) => [
-                  styles.tabButton,
-                  pressed && styles.tabButtonPressed,
-                ]}
-              >
-                <Text style={styles.tabButtonText}>Documents</Text>
-              </Pressable>
-            </ScrollView>
-          </View>
-
-          {/* ── 3. Timeline Content Area ─────────────────────────────────── */}
+          {/* ── 1. Timeline Content Area ─────────────────────────────────── */}
           {dayGroups.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <View style={styles.emptyStateIconCircle}>
@@ -283,7 +188,10 @@ export default function TripItineraryScreen() {
 
               {dayGroups.map((group, groupIdx) => {
                 // Extract month and weekday from group
-                const sampleDate = new Date(group.items[0].startDateTime);
+                const sampleDate =
+                  parseDate(group.items[0].startDateTime) ||
+                  parseDate(group.date) ||
+                  new Date();
                 const dayOfMonth = sampleDate.getDate();
                 const monthName = sampleDate.toLocaleDateString('en-US', {
                   month: 'long',
@@ -403,6 +311,7 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   backArrowText: {
+    fontFamily: fontFamily.medium,
     fontSize: 18,
     color: colors.textPrimary,
     fontWeight: '500',
@@ -519,6 +428,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   dayMonthLabel: {
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 1.2,

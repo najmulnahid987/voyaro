@@ -250,10 +250,10 @@ const styles = StyleSheet.create({
   },
   modalSheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: radius.sheet,
+    borderTopRightRadius: radius.sheet,
     paddingBottom: 32,
-    ...shadows.card,
+    ...shadows.sheet,
   },
   sheetHeader: {
     flexDirection: 'row',
