@@ -1,22 +1,20 @@
 /**
- * Voyaro Centralized In-Memory Itinerary State Layer (Phase 5)
+ * Voyaro Itinerary Persistence & State Layer (Phase 7 — Step 8)
  *
- * Requirements:
- *  - In-memory only (app session lifecycle).
- *  - No persistence, no AsyncStorage, no backend, no Supabase.
- *  - Fully reactive across React Native screens using standard React subscriptions.
- *  - Clean API interface ready to be substituted with Supabase in future phases.
+ * Connects the itinerary feature to Supabase while preserving reactive subscriptions
+ * for all React Native screens.
  *
- * Core Operations:
- *  - getItems(tripId)
- *  - getItem(itemId)
- *  - addItem(item)
- *  - updateItem(itemId, changes)
- *  - deleteItem(itemId)
- *  - clearItems(tripId)
+ * Guarantees:
+ *  - Supabase-backed persistent storage for Flights, Hotels, Activities, and Transportation.
+ *  - Strict type-safe metadata normalization so no fields are dropped.
+ *  - Timezone-safe start and end datetime ordering checks.
+ *  - RLS enforcement: only the trip owner can read or write itinerary items.
+ *  - Detail screens and timeline reactively re-render upon mutations.
+ *  - Safe cache cleanup on logout.
  */
 
-import { useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { supabase } from './supabase';
 import {
   ConcreteItineraryItem,
   CreateItineraryItemInput,
@@ -24,9 +22,16 @@ import {
   UpdateItineraryItemInput,
 } from '@/types/itinerary';
 import { sortItineraryItems } from '../utils/itineraryDateUtils';
+import {
+  mapItineraryItemRowToDomain,
+  mapItineraryItemToInsert,
+  mapItineraryItemToUpdate,
+  validateAndNormalizeMetadata,
+} from './mappers';
+import { ItineraryItemRow } from '@/types/database.types';
 
 // ---------------------------------------------------------------------------
-// 1. Initial Multi-Date Realistic Seed Data for Demo Trip
+// 1. Initial Seed Items (Development / Demo Routes Only)
 // ---------------------------------------------------------------------------
 
 const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
@@ -54,7 +59,6 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
       cabinClass: 'economy',
     },
   },
-
   // 1 Hotel (March 11 - 14)
   {
     id: 'itin-hotel-1',
@@ -77,7 +81,6 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
       nightsCount: 3,
     },
   },
-
   // Activity 1 (March 11)
   {
     id: 'itin-act-1',
@@ -98,7 +101,6 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
       guideName: 'Kenji Sato',
     },
   },
-
   // Transportation 1 (March 12)
   {
     id: 'itin-trans-1',
@@ -120,7 +122,6 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
       platform: 'Platform 14',
     },
   },
-
   // Activity 2 (March 12)
   {
     id: 'itin-act-2',
@@ -142,10 +143,10 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// 2. In-Memory Store & Subscription Mechanism
+// 2. In-Memory Cache & Subscription Mechanism
 // ---------------------------------------------------------------------------
 
-let itemsStore: ConcreteItineraryItem[] = [...INITIAL_SEED_ITEMS];
+let itemsStore: ConcreteItineraryItem[] = __DEV__ ? [...INITIAL_SEED_ITEMS] : [];
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -155,27 +156,344 @@ function notify(): void {
     try {
       listener();
     } catch (e) {
-      console.warn('Itinerary store listener error:', e);
+      console.warn('[Voyaro Itinerary] Store listener error:', e);
     }
   });
 }
 
-/**
- * Normalize trip ID so 'demo-trip' maps to 'japan-adventure' seamlessly
- */
+function isDevMockTrip(tripId?: string): boolean {
+  return Boolean(__DEV__ && (tripId === 'japan-adventure' || tripId === 'demo-trip'));
+}
+
 function normalizeTripId(tripId?: string): string {
-  if (!tripId || tripId === 'demo-trip') {
-    return 'japan-adventure';
-  }
+  if (!tripId) return 'japan-adventure';
+  if (tripId === 'demo-trip') return 'japan-adventure';
   return tripId;
 }
 
+export function subscribeToItinerary(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function getStoreSnapshot(): ConcreteItineraryItem[] {
+  return itemsStore;
+}
+
+export function clearItineraryCache(): void {
+  itemsStore = __DEV__ ? [...INITIAL_SEED_ITEMS] : [];
+  notify();
+}
+
 // ---------------------------------------------------------------------------
-// 3. Required Core Operations
+// 3. Core Supabase Operations
 // ---------------------------------------------------------------------------
 
 /**
- * Retrieve all itinerary items for a specific trip, sorted chronologically.
+ * Lists all itinerary items for a trip from Supabase, ordered chronologically.
+ */
+export async function listItineraryItems(tripId?: string): Promise<ConcreteItineraryItem[]> {
+  const normalized = normalizeTripId(tripId);
+
+  // If this is a development mock trip and we are in dev mode, return local seed data
+  if (isDevMockTrip(tripId)) {
+    return sortItineraryItems(itemsStore.filter((i) => i.tripId === normalized));
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return [];
+  }
+
+  const { data: rows, error } = await supabase
+    .from('itinerary_items')
+    .select('*')
+    .eq('trip_id', normalized)
+    .order('start_datetime', { ascending: true });
+
+  if (error) {
+    console.error(`[Voyaro Itinerary] listItineraryItems error for trip ${tripId}:`, error.message);
+    throw new Error(`Failed to load itinerary: ${error.message}`);
+  }
+
+  const domainItems = (rows || []).map((r) => mapItineraryItemRowToDomain(r as ItineraryItemRow));
+
+  // Merge into in-memory store for this trip
+  itemsStore = [
+    ...itemsStore.filter((item) => item.tripId !== normalized),
+    ...domainItems,
+  ];
+  notify();
+
+  return domainItems;
+}
+
+/**
+ * Fetches a single itinerary item by its UUID from Supabase.
+ */
+export async function fetchItineraryItemById(itemId: string): Promise<ConcreteItineraryItem | null> {
+  // Check dev seed items if in dev mode
+  if (__DEV__ && itemId.startsWith('itin-')) {
+    const seed = INITIAL_SEED_ITEMS.find((i) => i.id === itemId);
+    if (seed) return seed;
+  }
+
+  const { data: row, error } = await supabase
+    .from('itinerary_items')
+    .select('*')
+    .eq('id', itemId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[Voyaro Itinerary] fetchItineraryItemById error for ${itemId}:`, error.message);
+    throw new Error(`Failed to load itinerary item: ${error.message}`);
+  }
+
+  if (!row) {
+    return null;
+  }
+
+  const domainItem = mapItineraryItemRowToDomain(row as ItineraryItemRow);
+
+  // Update in-memory store
+  const index = itemsStore.findIndex((i) => i.id === itemId);
+  if (index >= 0) {
+    itemsStore[index] = domainItem;
+  } else {
+    itemsStore.push(domainItem);
+  }
+  notify();
+
+  return domainItem;
+}
+
+/**
+ * Creates and persists a new itinerary item in Supabase.
+ */
+export async function addItem(
+  item: CreateItineraryItemInput | ConcreteItineraryItem
+): Promise<ConcreteItineraryItem> {
+  // 1. Validation
+  if (!item.title?.trim()) {
+    throw new Error('Title is required for an itinerary item.');
+  }
+  if (!item.tripId) {
+    throw new Error('Trip ID is required.');
+  }
+  if (!item.type) {
+    throw new Error('Item type is required.');
+  }
+  if (!item.startDateTime) {
+    throw new Error('Start date and time is required.');
+  }
+
+  // 2. Validate datetime ordering
+  if (item.endDateTime) {
+    const start = new Date(item.startDateTime).getTime();
+    const end = new Date(item.endDateTime).getTime();
+    if (!isNaN(start) && !isNaN(end) && end < start) {
+      throw new Error('End date and time cannot be earlier than departure/start date.');
+    }
+  }
+
+  const normalizedTripId = normalizeTripId(item.tripId);
+
+  // If this is a dev route, insert into local seed items
+  if (isDevMockTrip(item.tripId)) {
+    const newItem: ConcreteItineraryItem = {
+      id: (item as ConcreteItineraryItem).id || `itin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      tripId: normalizedTripId,
+      type: item.type,
+      title: item.title.trim(),
+      startDateTime: item.startDateTime,
+      endDateTime: item.endDateTime || undefined,
+      location: item.location?.trim() || undefined,
+      notes: item.notes?.trim() || undefined,
+      confirmationNumber: item.confirmationNumber?.trim() || undefined,
+      metadata: validateAndNormalizeMetadata(item.type, item.metadata),
+    } as ConcreteItineraryItem;
+
+    itemsStore = [...itemsStore, newItem];
+    notify();
+    return newItem;
+  }
+
+  // 3. Supabase insert
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to add an itinerary item.');
+  }
+
+  const insertPayload = mapItineraryItemToInsert({
+    ...item,
+    tripId: normalizedTripId,
+    title: item.title.trim(),
+  } as any);
+
+  const { data: row, error } = await supabase
+    .from('itinerary_items')
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Voyaro Itinerary] addItem error:', error.message);
+    throw new Error(`Failed to save itinerary item: ${error.message}`);
+  }
+
+  const domainItem = mapItineraryItemRowToDomain(row as ItineraryItemRow);
+
+  // 4. Update local cache and notify subscribers
+  itemsStore = [...itemsStore.filter((i) => i.id !== domainItem.id), domainItem];
+  notify();
+
+  return domainItem;
+}
+
+/**
+ * Updates an existing itinerary item in Supabase.
+ */
+export async function updateItem(
+  itemId: string,
+  changes: UpdateItineraryItemInput
+): Promise<ConcreteItineraryItem> {
+  const existing = getItem(itemId);
+
+  // 1. Validate date ordering if updating dates
+  const newStart = changes.startDateTime || existing?.startDateTime;
+  const newEnd = changes.endDateTime !== undefined ? changes.endDateTime : existing?.endDateTime;
+  if (newStart && newEnd) {
+    const start = new Date(newStart).getTime();
+    const end = new Date(newEnd).getTime();
+    if (!isNaN(start) && !isNaN(end) && end < start) {
+      throw new Error('End date and time cannot be earlier than start date.');
+    }
+  }
+
+  // If this is a dev mock item, update in local cache
+  if (__DEV__ && itemId.startsWith('itin-')) {
+    if (!existing) throw new Error('Item not found.');
+    const updated: ConcreteItineraryItem = {
+      ...existing,
+      ...changes,
+      id: existing.id,
+      tripId: existing.tripId,
+      type: existing.type,
+      metadata: validateAndNormalizeMetadata(existing.type, {
+        ...(existing.metadata as any),
+        ...(changes.metadata as any),
+      }),
+    } as ConcreteItineraryItem;
+
+    itemsStore = itemsStore.map((i) => (i.id === itemId ? updated : i));
+    notify();
+    return updated;
+  }
+
+  // 2. Prepare payload with merged metadata
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to update an itinerary item.');
+  }
+
+  const itemType = (changes as any).type || existing?.type || 'activity';
+  const mergedMetadata = validateAndNormalizeMetadata(itemType, {
+    ...(existing?.metadata || {}),
+    ...(changes.metadata || {}),
+  });
+
+  const updatePayload = mapItineraryItemToUpdate({
+    ...changes,
+    type: itemType,
+    metadata: mergedMetadata as any,
+  });
+
+  const { data: row, error } = await supabase
+    .from('itinerary_items')
+    .update(updatePayload)
+    .eq('id', itemId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`[Voyaro Itinerary] updateItem error for ${itemId}:`, error.message);
+    throw new Error(`Failed to update itinerary item: ${error.message}`);
+  }
+
+  const domainItem = mapItineraryItemRowToDomain(row as ItineraryItemRow);
+
+  // 3. Update local cache and notify subscribers
+  itemsStore = itemsStore.map((i) => (i.id === itemId ? domainItem : i));
+  notify();
+
+  return domainItem;
+}
+
+/**
+ * Deletes an itinerary item by ID from Supabase.
+ */
+export async function deleteItem(itemId: string): Promise<boolean> {
+  // If dev mock item
+  if (__DEV__ && itemId.startsWith('itin-')) {
+    const prevLen = itemsStore.length;
+    itemsStore = itemsStore.filter((i) => i.id !== itemId);
+    const deleted = itemsStore.length < prevLen;
+    if (deleted) notify();
+    return deleted;
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to delete an itinerary item.');
+  }
+
+  const { data, error } = await supabase
+    .from('itinerary_items')
+    .delete()
+    .eq('id', itemId)
+    .select('id');
+
+  if (error) {
+    console.error(`[Voyaro Itinerary] deleteItem error for ${itemId}:`, error.message);
+    throw new Error(`Failed to delete itinerary item: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    return false;
+  }
+
+  itemsStore = itemsStore.filter((i) => i.id !== itemId);
+  notify();
+
+  return true;
+}
+
+/**
+ * Clear all itinerary items for a specific trip.
+ */
+export async function clearItems(tripId?: string): Promise<void> {
+  const normalized = normalizeTripId(tripId);
+
+  if (!isDevMockTrip(tripId)) {
+    const { error } = await supabase
+      .from('itinerary_items')
+      .delete()
+      .eq('trip_id', normalized);
+
+    if (error) {
+      console.error(`[Voyaro Itinerary] clearItems error for ${tripId}:`, error.message);
+      throw new Error(`Failed to clear items: ${error.message}`);
+    }
+  }
+
+  itemsStore = itemsStore.filter((item) => item.tripId !== normalized);
+  notify();
+}
+
+/**
+ * Synchronously retrieves cached itinerary items for a specific trip, sorted chronologically.
  */
 export function getItems(tripId?: string): ConcreteItineraryItem[] {
   const normalized = normalizeTripId(tripId);
@@ -183,97 +501,10 @@ export function getItems(tripId?: string): ConcreteItineraryItem[] {
 }
 
 /**
- * Retrieve a single itinerary item by its ID.
+ * Synchronously retrieves a single itinerary item by ID from cache.
  */
 export function getItem(itemId: string): ConcreteItineraryItem | undefined {
   return itemsStore.find((item) => item.id === itemId);
-}
-
-/**
- * Add a new itinerary item to the in-memory store.
- * Immediately notifies all reactive subscribers.
- */
-export function addItem(
-  item: CreateItineraryItemInput | ConcreteItineraryItem
-): ConcreteItineraryItem {
-  const newItem: ConcreteItineraryItem = {
-    id: (item as ConcreteItineraryItem).id || `itin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    tripId: normalizeTripId(item.tripId),
-    type: item.type,
-    title: item.title,
-    startDateTime: item.startDateTime,
-    endDateTime: item.endDateTime,
-    location: item.location,
-    notes: item.notes,
-    confirmationNumber: item.confirmationNumber,
-    metadata: { ...(item.metadata as any) },
-  } as ConcreteItineraryItem;
-
-  itemsStore = [...itemsStore, newItem];
-  notify();
-  return newItem;
-}
-
-/**
- * Update an existing itinerary item by ID.
- * Merges top-level fields and nested metadata.
- * Immediately notifies all reactive subscribers.
- */
-export function updateItem(
-  itemId: string,
-  changes: UpdateItineraryItemInput
-): ConcreteItineraryItem | undefined {
-  const index = itemsStore.findIndex((item) => item.id === itemId);
-  if (index === -1) {
-    return undefined;
-  }
-
-  const existing = itemsStore[index];
-  const updated: ConcreteItineraryItem = {
-    ...existing,
-    ...changes,
-    id: existing.id,
-    tripId: existing.tripId,
-    type: existing.type,
-    metadata: {
-      ...(existing.metadata as any),
-      ...(changes.metadata as any),
-    },
-  } as ConcreteItineraryItem;
-
-  itemsStore = [
-    ...itemsStore.slice(0, index),
-    updated,
-    ...itemsStore.slice(index + 1),
-  ];
-
-  notify();
-  return updated;
-}
-
-/**
- * Delete an itinerary item by ID.
- * Immediately notifies all reactive subscribers.
- */
-export function deleteItem(itemId: string): boolean {
-  const previousLength = itemsStore.length;
-  itemsStore = itemsStore.filter((item) => item.id !== itemId);
-  const deleted = itemsStore.length < previousLength;
-
-  if (deleted) {
-    notify();
-  }
-  return deleted;
-}
-
-/**
- * Clear all itinerary items for a specific trip.
- * Immediately notifies all reactive subscribers.
- */
-export function clearItems(tripId?: string): void {
-  const normalized = normalizeTripId(tripId);
-  itemsStore = itemsStore.filter((item) => item.tripId !== normalized);
-  notify();
 }
 
 /**
@@ -284,30 +515,12 @@ export function resetSeedItems(): void {
   notify();
 }
 
-/**
- * Subscribe to store mutations.
- */
-export function subscribeToItinerary(listener: Listener): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-/**
- * Get snapshot of full store
- */
-export function getStoreSnapshot(): ConcreteItineraryItem[] {
-  return itemsStore;
-}
-
 // ---------------------------------------------------------------------------
-// 4. React Hooks for Effortless Component Reactivity
+// 4. React Hooks for Reactive State Management
 // ---------------------------------------------------------------------------
 
 /**
- * Reactive React hook that subscribes to the itinerary state of a given trip.
- * Re-renders automatically whenever items are added, updated, or deleted.
+ * Reactive React hook that queries and subscribes to the itinerary of a given trip.
  */
 export function useItinerary(tripId?: string) {
   const allItems = useSyncExternalStore(
@@ -317,6 +530,49 @@ export function useItinerary(tripId?: string) {
   );
 
   const normalized = normalizeTripId(tripId);
+  const [loading, setLoading] = useState<boolean>(Boolean(tripId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tripId) {
+      return;
+    }
+    let isMounted = true;
+    listItineraryItems(tripId)
+      .then(() => {
+        if (isMounted) {
+          setError(null);
+        }
+      })
+      .catch((err: any) => {
+        if (isMounted) {
+          setError(err.message || 'Failed to load itinerary items.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId]);
+
+  const refresh = useCallback(async () => {
+    if (!tripId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await listItineraryItems(tripId);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load itinerary items.');
+    } finally {
+      setLoading(false);
+    }
+  }, [tripId]);
+
   const items = sortItineraryItems(
     allItems.filter((item) => item.tripId === normalized)
   );
@@ -325,6 +581,9 @@ export function useItinerary(tripId?: string) {
     items,
     itemCount: items.length,
     isEmpty: items.length === 0,
+    loading,
+    error,
+    refresh,
     getItems: () => getItems(tripId),
     getItem,
     addItem,
@@ -335,8 +594,7 @@ export function useItinerary(tripId?: string) {
 }
 
 /**
- * Reactive React hook that subscribes to a specific itinerary item by ID.
- * Re-renders automatically when that item is modified or deleted.
+ * Reactive React hook that retrieves and subscribes to a specific itinerary item by ID.
  */
 export function useItineraryItem(itemId?: string) {
   const allItems = useSyncExternalStore(
@@ -346,13 +604,58 @@ export function useItineraryItem(itemId?: string) {
   );
 
   const item = itemId ? allItems.find((i) => i.id === itemId) : undefined;
+  const [loading, setLoading] = useState<boolean>(!item && Boolean(itemId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!itemId || item) {
+      return;
+    }
+    let isMounted = true;
+    fetchItineraryItemById(itemId)
+      .then(() => {
+        if (isMounted) {
+          setError(null);
+        }
+      })
+      .catch((err: any) => {
+        if (isMounted) {
+          setError(err.message || 'Failed to load itinerary item.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [itemId, item]);
+
+  const refresh = useCallback(async () => {
+    if (!itemId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchItineraryItemById(itemId);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load itinerary item.');
+    } finally {
+      setLoading(false);
+    }
+  }, [itemId]);
 
   return {
     item,
     exists: Boolean(item),
+    loading,
+    error,
+    refresh,
     update: (changes: UpdateItineraryItemInput) =>
-      itemId ? updateItem(itemId, changes) : undefined,
-    remove: () => (itemId ? deleteItem(itemId) : false),
+      itemId ? updateItem(itemId, changes) : Promise.reject(new Error('No itemId')),
+    remove: () => (itemId ? deleteItem(itemId) : Promise.reject(new Error('No itemId'))),
   };
 }
 
@@ -361,12 +664,15 @@ export function useItineraryItem(itemId?: string) {
 // ---------------------------------------------------------------------------
 
 export const itineraryStore = {
+  listItineraryItems,
+  fetchItineraryItemById,
   getItems,
   getItem,
   addItem,
   updateItem,
   deleteItem,
   clearItems,
+  clearItineraryCache,
   resetSeedItems,
   subscribe: subscribeToItinerary,
   useItinerary,

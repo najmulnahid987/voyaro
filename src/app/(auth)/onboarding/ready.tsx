@@ -18,13 +18,25 @@ import { completeOnboarding } from '@/services/auth';
  * Visual source of truth: Google Stitch Onboarding Complete design.
  */
 export default function ReadyScreen() {
-  const handleCreateFirstTrip = () => {
-    // 1. Complete onboarding in centralized auth service
-    completeOnboarding();
+  const [submitting, setSubmitting] = React.useState(false);
 
-    // 2. Navigate to the main authenticated Home screen
-    router.replace('/(tabs)');
+  const handleCreateFirstTrip = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      // 1. Complete onboarding in centralized auth service & Supabase profiles table
+      await completeOnboarding();
+
+      // 2. Navigate to the main authenticated Home screen
+      router.replace('/(tabs)');
+    } catch (err) {
+      console.warn('[Voyaro Onboarding] Failed to complete onboarding:', err);
+      router.replace('/(tabs)');
+    } finally {
+      setSubmitting(false);
+    }
   };
+
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -56,7 +68,9 @@ export default function ReadyScreen() {
       <View style={styles.bottomBar}>
         <Button
           variant="primary"
-          label="Create my first trip"
+          label={submitting ? 'Setting up...' : 'Create my first trip'}
+          loading={submitting}
+          disabled={submitting}
           rightIcon={
             <Image
               source={require('@/assets/images/onboarding/arrow-right.svg')}

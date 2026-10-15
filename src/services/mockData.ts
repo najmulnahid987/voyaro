@@ -88,6 +88,8 @@ export interface Trip {
   statusBadgeLabel?: string;
   travelerCount: number;
   travelers?: Traveler[];
+  userRole?: 'owner' | 'editor' | 'viewer';
+  isOwner?: boolean;
   itineraryCount: number;
   coverImage?: string;
   category?: 'flight' | 'landscape' | 'beach' | 'city';

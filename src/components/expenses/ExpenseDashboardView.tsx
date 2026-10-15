@@ -17,6 +17,7 @@
 import { useShellInsets } from '@/components/navigation';
 import { useTripExpenses } from '@/services/expenseStore';
 import { getAllTrips, getTripById, getTripTravelers } from '@/services/mockData';
+import { getCachedTrips } from '@/services/trip';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { Expense } from '@/types/expense';
 import {
@@ -25,13 +26,15 @@ import {
 } from '@/utils/currencyUtils';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from 'react-native';
 import { BudgetOverviewCard } from './BudgetOverviewCard';
 import { CategoryBreakdownCard } from './CategoryBreakdownCard';
@@ -72,20 +75,37 @@ export function ExpenseDashboardView({
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
   // 1. Resolve Trip Reference
-  const allTrips = getAllTrips();
+  const allMockTrips = getAllTrips();
+  const cachedTrips = getCachedTrips() || [];
+  const effectiveAllTrips = cachedTrips.length > 0 ? cachedTrips : allMockTrips;
+
   const [activeTripId, setActiveTripId] = useState<string>(
-    () => tripId || 'japan-adventure'
+    () => tripId || effectiveAllTrips[0]?.id || 'japan-adventure'
   );
   const [showTripMenu, setShowTripMenu] = useState<boolean>(false);
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
 
   // If prop tripId changes, sync internal state
   const currentTripId = tripId || activeTripId;
-  const trip = getTripById(currentTripId) || allTrips[0];
+  const trip =
+    cachedTrips.find((t) => t.id === currentTripId) ||
+    getTripById(currentTripId) ||
+    effectiveAllTrips[0];
   const travelers = useMemo(() => getTripTravelers(currentTripId), [currentTripId]);
 
   // 2. Subscribe to Trip Expenses & Budget State
-  const { expenses, budget, summary, isEmpty } = useTripExpenses(currentTripId);
+  const { expenses, budget, summary, isEmpty, loading, error, refresh } =
+    useTripExpenses(currentTripId);
+
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refresh]);
 
   // 3. Date Grouping & Multi-Currency Detection
   const dayGroups = useMemo(() => {
@@ -132,6 +152,9 @@ export function ExpenseDashboardView({
     return traveler ? traveler.name : paidBy;
   };
 
+  const isOwner = trip.isOwner !== false;
+  const isViewer = trip.userRole === 'viewer';
+
   return (
     <View style={styles.safeArea}>
       <ScrollView
@@ -144,6 +167,13 @@ export function ExpenseDashboardView({
           },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.container}>
           {/* ── 1. Top Navigation & Header Row ───────────────────────────── */}
@@ -176,26 +206,28 @@ export function ExpenseDashboardView({
                 )}
 
                 {/* Add Expense Action Button */}
-                <Pressable
-                  onPress={handleAddExpense}
-                  style={({ pressed }) => [
-                    styles.addIconButton,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel="Add Expense"
-                >
-                  <Image
-                    source={require('@/assets/images/icons/plus.svg')}
-                    style={styles.plusIcon}
-                    tintColor={colors.textOnPrimary}
-                    contentFit="contain"
-                  />
-                </Pressable>
+                {!isViewer && (
+                  <Pressable
+                    onPress={handleAddExpense}
+                    style={({ pressed }) => [
+                      styles.addIconButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Add Expense"
+                  >
+                    <Image
+                      source={require('@/assets/images/icons/plus.svg')}
+                      style={styles.plusIcon}
+                      tintColor={colors.textOnPrimary}
+                      contentFit="contain"
+                    />
+                  </Pressable>
+                )}
               </View>
 
               {/* Trip Title / Trip Selector */}
-              {showTripSelector && allTrips.length > 1 ? (
+              {showTripSelector && effectiveAllTrips.length > 1 ? (
                 <View style={styles.tripSelectorContainer}>
                   <Pressable
                     onPress={() => setShowTripMenu((prev) => !prev)}
@@ -211,7 +243,7 @@ export function ExpenseDashboardView({
 
                   {showTripMenu && (
                     <View style={styles.tripDropdown}>
-                      {allTrips.map((t) => (
+                      {effectiveAllTrips.map((t) => (
                         <Pressable
                           key={t.id}
                           onPress={() => {
@@ -305,12 +337,27 @@ export function ExpenseDashboardView({
             </View>
           )}
 
+          {error && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{error}</Text>
+              <Pressable onPress={handleRefresh} style={styles.retryButton}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {loading && isEmpty && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          )}
+
           {/* ── 2. Budget Overview Hero Card ─────────────────────────────── */}
           <BudgetOverviewCard
             summary={summary}
             budget={budget}
             multiCurrencyTotals={multiCurrencyTotals}
-            onEditBudget={() => setShowBudgetModal(true)}
+            onEditBudget={isOwner ? () => setShowBudgetModal(true) : undefined}
           />
 
           {/* ── 3. Category Spending Breakdown Card ───────────────────────── */}
@@ -329,17 +376,19 @@ export function ExpenseDashboardView({
               </Text>
             </View>
 
-            <Pressable
-              onPress={handleAddExpense}
-              style={({ pressed }) => [
-                styles.addInlineButton,
-                pressed && styles.buttonPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Add Expense"
-            >
-              <Text style={styles.addInlineButtonText}>+ Add Expense</Text>
-            </Pressable>
+            {!isViewer && (
+              <Pressable
+                onPress={handleAddExpense}
+                style={({ pressed }) => [
+                  styles.addInlineButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Add Expense"
+              >
+                <Text style={styles.addInlineButtonText}>+ Add Expense</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* ── 4. Empty State or Date-Grouped Expenses ───────────────────── */}
@@ -358,17 +407,19 @@ export function ExpenseDashboardView({
                 Keep track of your spending on meals, lodging, activities, and transport
                 during your journey.
               </Text>
-              <Pressable
-                onPress={handleAddExpense}
-                style={({ pressed }) => [
-                  styles.emptyCtaButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Add your first expense"
-              >
-                <Text style={styles.emptyCtaButtonText}>+ Add Your First Expense</Text>
-              </Pressable>
+              {!isViewer && (
+                <Pressable
+                  onPress={handleAddExpense}
+                  style={({ pressed }) => [
+                    styles.emptyCtaButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add your first expense"
+                >
+                  <Text style={styles.emptyCtaButtonText}>+ Add Your First Expense</Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <View style={styles.timelineContainer}>
@@ -714,5 +765,40 @@ const styles = StyleSheet.create({
   },
   dayItemsList: {
     marginTop: 2,
+  },
+  errorBanner: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: radius.input,
+    padding: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+  },
+  errorBannerText: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 13,
+    color: '#B91C1C',
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  retryButton: {
+    backgroundColor: '#DC2626',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.input,
+  },
+  retryButtonText: {
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  loadingContainer: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

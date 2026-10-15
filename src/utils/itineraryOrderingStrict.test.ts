@@ -43,13 +43,13 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
-export function runStrictOrderingTests(): void {
+export async function runStrictOrderingTests(): Promise<void> {
   console.log('------------------------------------------------------------');
   console.log('RUNNING STRICT ITINERARY STATE & ORDERING TEST SUITE');
   console.log('------------------------------------------------------------');
 
   const tripId = 'strict-test-trip-ordering';
-  clearItems(tripId);
+  await clearItems(tripId);
 
   // =========================================================================
   // STEP 1: Create 5 items in RANDOM order as specified
@@ -57,7 +57,7 @@ export function runStrictOrderingTests(): void {
   console.log('\n[TEST 1] Creating items in random order...');
 
   // 1. Activity — March 12 2:00 PM
-  const item1 = addItem({
+  const item1 = await addItem({
     tripId,
     type: 'activity',
     title: 'Activity',
@@ -68,7 +68,7 @@ export function runStrictOrderingTests(): void {
   });
 
   // 2. Flight — March 10 8:30 PM
-  const item2 = addItem({
+  const item2 = await addItem({
     tripId,
     type: 'flight',
     title: 'Flight',
@@ -84,7 +84,7 @@ export function runStrictOrderingTests(): void {
   });
 
   // 3. Hotel — March 11 3:00 PM
-  const item3 = addItem({
+  const item3 = await addItem({
     tripId,
     type: 'hotel',
     title: 'Hotel',
@@ -101,7 +101,7 @@ export function runStrictOrderingTests(): void {
   });
 
   // 4. Train — March 15 9:00 AM
-  const item4 = addItem({
+  const item4 = await addItem({
     tripId,
     type: 'transportation',
     title: 'Train',
@@ -117,7 +117,7 @@ export function runStrictOrderingTests(): void {
   });
 
   // 5. Activity — March 10 10:00 PM
-  const item5 = addItem({
+  const item5 = await addItem({
     tripId,
     type: 'activity',
     title: 'Activity',
@@ -214,7 +214,7 @@ export function runStrictOrderingTests(): void {
   // =========================================================================
   console.log('\n[TEST 3] Sub-test 1 & 2: Edit item time & verify automatic move within day...');
   // Move Flight from 8:30 PM to 11:00 PM (23:00) on March 10
-  updateItem(item2.id, {
+  await updateItem(item2.id, {
     startDateTime: '2028-03-10T23:00:00.000Z',
     endDateTime: '2028-03-11T02:00:00.000Z',
   });
@@ -240,7 +240,7 @@ export function runStrictOrderingTests(): void {
   console.log('  ✓ Item moved automatically within March 10: 10:00 PM Activity -> 11:00 PM Flight');
 
   // Restore Flight back to 8:30 PM for clarity
-  updateItem(item2.id, {
+  await updateItem(item2.id, {
     startDateTime: '2028-03-10T20:30:00.000Z',
     endDateTime: '2028-03-10T23:30:00.000Z',
   });
@@ -250,7 +250,7 @@ export function runStrictOrderingTests(): void {
   // =========================================================================
   console.log('\n[TEST 4] Sub-test 3 & 4: Edit item date & verify moving to another day...');
   // Move March 12 Activity to March 13 2:00 PM
-  updateItem(item1.id, {
+  await updateItem(item1.id, {
     startDateTime: '2028-03-13T14:00:00.000Z',
     endDateTime: '2028-03-13T16:00:00.000Z',
   });
@@ -274,7 +274,7 @@ export function runStrictOrderingTests(): void {
   // =========================================================================
   console.log('\n[TEST 5] Sub-test 5 & 6: Delete an item & verify day disappears per design...');
   // Delete the Train on March 15
-  const deleted = deleteItem(item4.id);
+  const deleted = await deleteItem(item4.id);
   assert(deleted, 'Train item must be deleted');
   assert(getItem(item4.id) === undefined, 'Deleted item must not exist in store');
 
@@ -288,7 +288,7 @@ export function runStrictOrderingTests(): void {
   // =========================================================================
   console.log('\n[TEST 6] Sub-test 7 & 8: Add overnight flight & verify start/end dates representation...');
   // Add Overnight Flight: Departs March 16 11:00 PM, Arrives March 17 7:00 AM
-  const overnightFlight = addItem({
+  const overnightFlight = await addItem({
     tripId,
     type: 'flight',
     title: 'Overnight Flight to London (LHR)',

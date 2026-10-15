@@ -37,7 +37,7 @@ function assert(condition: boolean, message: string) {
   console.log(`✓ PASS: ${message}`);
 }
 
-export function runExpenseStoreTests() {
+export async function runExpenseStoreTests() {
   console.log('\n--- Running Voyaro Expense Store Test Suite (Step 2) ---\n');
 
   // Reset to seed data at start
@@ -103,7 +103,7 @@ export function runExpenseStoreTests() {
   // Rejects invalid non-existent trip ID
   let invalidTripErrorCaught = false;
   try {
-    addExpense({
+    await addExpense({
       tripId: 'fake-phantom-trip-404',
       title: 'Coffee',
       amount: 450,
@@ -123,7 +123,7 @@ export function runExpenseStoreTests() {
   // Rejects zero / negative amount
   let zeroAmountErrorCaught = false;
   try {
-    addExpense({
+    await addExpense({
       tripId: 'japan-adventure',
       title: 'Free Sample',
       amount: 0,
@@ -138,7 +138,7 @@ export function runExpenseStoreTests() {
 
   // Successfully adds a valid expense
   subscriberNotified = false;
-  const added = addExpense({
+  const added = await addExpense({
     tripId: 'japan-adventure',
     title: 'Matcha Ice Cream at Gion',
     amount: 550, // $5.50
@@ -171,7 +171,7 @@ export function runExpenseStoreTests() {
   const originalId = added.id;
   const originalTripId = added.tripId;
 
-  const updated = updateExpense(originalId, {
+  const updated = await updateExpense(originalId, {
     title: 'Premium Matcha Parfait at Gion',
     amount: 1200, // $12.00 (was $5.50)
     // Malicious attempt to change id or tripId
@@ -193,7 +193,7 @@ export function runExpenseStoreTests() {
   );
 
   // Updating unknown ID safely returns undefined
-  const updateUnknown = updateExpense('unknown-id', { title: 'Test' });
+  const updateUnknown = await updateExpense('unknown-id', { title: 'Test' });
   assert(updateUnknown === undefined, 'updateExpense safely returns undefined for unknown ID');
 
   // -------------------------------------------------------------------------
@@ -201,7 +201,7 @@ export function runExpenseStoreTests() {
   // -------------------------------------------------------------------------
   console.log('\n5. Testing deleteExpense...');
   subscriberNotified = false;
-  const deleted = deleteExpense(originalId);
+  const deleted = await deleteExpense(originalId);
   assert(deleted, 'deleteExpense returned true');
   assert(subscriberNotified, 'Subscriber notified of deletion');
 
@@ -217,7 +217,7 @@ export function runExpenseStoreTests() {
   );
 
   // Deleting unknown ID safely returns false
-  const deleteUnknown = deleteExpense('unknown-id');
+  const deleteUnknown = await deleteExpense('unknown-id');
   assert(deleteUnknown === false, 'deleteExpense safely returns false for unknown ID');
 
   // -------------------------------------------------------------------------
@@ -231,7 +231,7 @@ export function runExpenseStoreTests() {
 
   // Update budget
   subscriberNotified = false;
-  const newBudget = setTripBudget('japan-adventure', 5000, 'USD'); // $5,000.00
+  const newBudget = await setTripBudget('japan-adventure', 5000, 'USD'); // $5,000.00
   assert(newBudget.amount === 500000, 'setTripBudget converts 5000 major to 500000 minor units');
   assert(newBudget.currency === 'USD', 'Currency stored correctly');
   assert(subscriberNotified, 'Subscriber notified of budget update');

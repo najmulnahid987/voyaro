@@ -32,7 +32,7 @@ function assert(condition: boolean, message: string) {
   console.log(`✓ PASS: ${message}`);
 }
 
-export function runItemDetailWorkflowTests() {
+export async function runItemDetailWorkflowTests() {
   console.log('\n========================================');
   console.log('--- Running Item Details Workflow Tests ---');
   console.log('========================================\n');
@@ -116,7 +116,7 @@ export function runItemDetailWorkflowTests() {
   // -------------------------------------------------------------------------
 
   // 5.1 Edit FLIGHT
-  const updatedFlight = updateItem(flight!.id, {
+  const updatedFlight = await updateItem(flight!.id, {
     notes: 'Upgraded to business class. Window seat 2K.',
     metadata: {
       flightNumber: 'EK589',
@@ -133,7 +133,7 @@ export function runItemDetailWorkflowTests() {
   assert(getItems(tripId).length === initialCount, 'No duplicate flight created on edit (count unchanged)');
 
   // 5.2 Edit HOTEL
-  const updatedHotel = updateItem(hotel!.id, {
+  const updatedHotel = await updateItem(hotel!.id, {
     notes: 'Late check-in requested at 6 PM. VIP arrival gift requested.',
     metadata: {
       room: 'Presidential Suite 901',
@@ -149,7 +149,7 @@ export function runItemDetailWorkflowTests() {
   assert(getItems(tripId).length === initialCount, 'No duplicate hotel created on edit (count unchanged)');
 
   // 5.3 Edit ACTIVITY
-  const updatedActivity = updateItem(activity!.id, {
+  const updatedActivity = await updateItem(activity!.id, {
     title: 'VIP Shibuya Crossing & Hidden Rooftops Tour',
     notes: 'Meet at Shibuya Sky tower entrance instead of statue.',
     metadata: {
@@ -165,7 +165,7 @@ export function runItemDetailWorkflowTests() {
   assert(getItems(tripId).length === initialCount, 'No duplicate activity created on edit (count unchanged)');
 
   // 5.4 Edit TRANSPORTATION
-  const updatedTransport = updateItem(transport!.id, {
+  const updatedTransport = await updateItem(transport!.id, {
     title: 'Shinkansen Bullet Train (Hikari #501)',
     location: 'Tokyo Station (Platform 16) → Kyoto Station',
     notes: 'Mount Fuji view side seats confirmed. Large luggage space booked.',
@@ -184,7 +184,7 @@ export function runItemDetailWorkflowTests() {
   // 5.5 CHRONOLOGICAL TIMELINE REORDERING VERIFICATION
   // Move transport from March 12 to early morning March 10 (before flight)
   const earlierTime = '2028-03-10T06:00:00.000Z';
-  updateItem(transport!.id, {
+  await updateItem(transport!.id, {
     startDateTime: earlierTime,
   });
   const reorderedItems = getItems(tripId);
@@ -197,14 +197,14 @@ export function runItemDetailWorkflowTests() {
   assert(dayGroups[0].items.some((i) => i.id === transport!.id), 'Edited transport correctly placed in Day 1 group');
 
   // 5.6 INVALID / MISSING ITEM ID HANDLING
-  const invalidResult = updateItem('non-existent-id-xyz', { title: 'Ghost Item' });
+  const invalidResult = await updateItem('non-existent-id-xyz', { title: 'Ghost Item' }).catch(() => undefined);
   assert(invalidResult === undefined, 'updateItem with non-existent id returns undefined gracefully');
   assert(getItems(tripId).length === initialCount, 'Store remains unaffected by invalid update attempt');
 
   // -------------------------------------------------------------------------
   // 6. DELETE Action Verification
   // -------------------------------------------------------------------------
-  const deleteSuccess = deleteItem(activity!.id);
+  const deleteSuccess = await deleteItem(activity!.id);
   assert(deleteSuccess === true, 'deleteItem returns true upon success');
   assert(getItem(activity!.id) === undefined, 'Deleted activity item is no longer found in store');
   assert(

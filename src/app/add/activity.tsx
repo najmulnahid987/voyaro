@@ -14,8 +14,9 @@
  *   - Seamless submission into in-memory itinerary state and automatic return to timeline
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,6 +31,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { fetchUserTripRole } from '@/services/collaboration';
 import { ActivityMetadata, ConcreteItineraryItem } from '@/types/itinerary';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 import { parseDate } from '@/utils/itineraryDateUtils';
@@ -139,6 +141,19 @@ export default function AddActivityScreen() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (effectiveTripId) {
+      fetchUserTripRole(effectiveTripId).then((r) => {
+        if (isMounted) setUserRole(r);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -163,9 +178,17 @@ export default function AddActivityScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    if (userRole === 'viewer') {
+      Alert.alert('Permission Denied', 'Viewers have read-only access and cannot create or modify itinerary reservations.');
+      return;
+    }
+
     if (!validate()) return;
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, submit: '' }));
 
     try {
       // 1. Construct ISO Date-Time strings
@@ -174,9 +197,9 @@ export default function AddActivityScreen() {
       const startIso = `${dateStr}T${startTimeStr}:00.000Z`;
       const endIso = endTime ? `${dateStr}T${toTimeKey(endTime)}:00.000Z` : undefined;
 
-      // 2. Add or Update in In-Memory Store
+      // 2. Add or Update in Supabase Store
       if (isEditMode && itemId) {
-        updateItem(itemId, {
+        await updateItem(itemId, {
           title: activityName.trim(),
           startDateTime: startIso,
           endDateTime: endIso,
@@ -192,8 +215,7 @@ export default function AddActivityScreen() {
           },
         });
       } else {
-        const newActivity: ConcreteItineraryItem = {
-          id: `itin-act-${Date.now()}`,
+        await addItem({
           tripId: effectiveTripId,
           type: 'activity',
           title: activityName.trim(),
@@ -209,9 +231,7 @@ export default function AddActivityScreen() {
             duration: endTime ? `${startTimeStr} - ${toTimeKey(endTime)}` : undefined,
             meetingPoint: location.trim() || undefined,
           },
-        };
-
-        addItem(newActivity);
+        });
       }
 
       // 3. Return to previous screen (Details or Timeline)
@@ -220,9 +240,13 @@ export default function AddActivityScreen() {
       } else {
         router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Error saving activity:', e);
       setIsSubmitting(false);
+      setErrors((prev) => ({
+        ...prev,
+        submit: e.message || 'Failed to save activity. Please check the details and try again.',
+      }));
     }
   };
 
@@ -289,6 +313,12 @@ export default function AddActivityScreen() {
               />
             </Pressable>
           </View>
+
+          {errors.submit ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{errors.submit}</Text>
+            </View>
+          ) : null}
 
           {/* ── 2. Activity Details Section ──────────────────────────────── */}
           <View style={styles.section}>
@@ -978,5 +1008,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: 'rgba(176, 74, 74, 0.30)',
+  },
+  errorBannerText: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.error,
+    textAlign: 'center',
   },
 });

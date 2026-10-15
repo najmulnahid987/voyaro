@@ -15,8 +15,9 @@
  *   - Chronologically sorted and immediately reactive in the itinerary timeline
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -31,6 +32,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { fetchUserTripRole } from '@/services/collaboration';
 import { ConcreteItineraryItem, TransportationMetadata, TransportationType } from '@/types/itinerary';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
 import { isMultiDayItem, parseDate } from '@/utils/itineraryDateUtils';
@@ -181,6 +183,20 @@ export default function AddTransportationScreen() {
     [departureTimeObj, arrivalTimeObj, isOvernight]
   );
 
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (effectiveTripId) {
+      fetchUserTripRole(effectiveTripId).then((r) => {
+        if (isMounted) setUserRole(r);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
+
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
@@ -212,9 +228,17 @@ export default function AddTransportationScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    if (userRole === 'viewer') {
+      Alert.alert('Permission Denied', 'Viewers have read-only access and cannot create or modify transportation bookings.');
+      return;
+    }
+
     if (!validate()) return;
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, submit: '' }));
 
     try {
       // 1. Compute Start and End ISO strings
@@ -241,9 +265,9 @@ export default function AddTransportationScreen() {
         ? `${modeLabel}: ${providerRoute.trim()}`
         : `${modeLabel} (${fromLocation.trim()} → ${toLocation.trim()})`;
 
-      // 3. Add or Update in In-Memory Store
+      // 3. Add or Update in Supabase Store
       if (isEditMode && itemId) {
-        updateItem(itemId, {
+        await updateItem(itemId, {
           title,
           startDateTime: startIso,
           endDateTime: endIso,
@@ -263,8 +287,7 @@ export default function AddTransportationScreen() {
           },
         });
       } else {
-        const newTransportItem: ConcreteItineraryItem = {
-          id: `itin-trans-${Date.now()}`,
+        await addItem({
           tripId: effectiveTripId,
           type: 'transportation',
           title,
@@ -283,9 +306,7 @@ export default function AddTransportationScreen() {
             pickupTime: depTimeStr || undefined,
             dropoffTime: arrTimeStr || undefined,
           },
-        };
-
-        addItem(newTransportItem);
+        });
       }
 
       // 4. Return to previous screen (Details or Timeline)
@@ -294,9 +315,13 @@ export default function AddTransportationScreen() {
       } else {
         router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Error adding transportation item:', e);
       setIsSubmitting(false);
+      setErrors((prev) => ({
+        ...prev,
+        submit: e.message || 'Failed to save transportation. Please check the details and try again.',
+      }));
     }
   };
 
@@ -348,6 +373,12 @@ export default function AddTransportationScreen() {
               />
             </Pressable>
           </View>
+
+          {errors.submit ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{errors.submit}</Text>
+            </View>
+          ) : null}
 
           {/* ── Section 1: Transportation Type Selector ──────────────── */}
           <View style={styles.section}>
@@ -1369,5 +1400,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: 'rgba(176, 74, 74, 0.30)',
+  },
+  errorBannerText: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.error,
+    textAlign: 'center',
   },
 });

@@ -1,24 +1,21 @@
 /**
- * Voyaro Centralized In-Memory Expense State Layer (Phase 6)
+ * Voyaro Centralized Expense & Budget Persistence State Layer (Phase 7 — Step 9)
  *
- * Requirements:
- *  - In-memory only (app session lifecycle).
- *  - No persistence, no AsyncStorage, no SQLite, no backend, no Supabase.
- *  - Fully reactive across React Native screens using native useSyncExternalStore.
- *  - Mirrors the exact architecture established by itineraryStore.ts in Phase 5.
- *  - Budget state is kept separate from expense records.
- *  - Strictly isolates amounts by currency; never sums mismatched currencies.
+ * Connects the Phase 6 expense and budget experience to Supabase while preserving
+ * fast in-memory caching and reactive useSyncExternalStore subscriptions.
  *
- * Core Operations:
- *  - getExpensesByTrip(tripId)
- *  - getExpenseById(expenseId)
- *  - addExpense(expense)
- *  - updateExpense(expenseId, updates)
- *  - deleteExpense(expenseId)
- *  - setTripBudget(tripId, amount, currency)
- *  - getTripBudget(tripId)
+ * Guarantees:
+ *  - Supabase-backed persistent storage for expenses and trip budgets.
+ *  - Strict Row Level Security (RLS) enforcement: operations scoped to trips owned by auth.uid().
+ *  - Monetary precision: exact integer minor units (cents) preserved end-to-end.
+ *  - Multi-currency isolation: never sums differing currencies together; maintains currency totals.
+ *  - Live totals, remaining budgets, percent used, and overspending indicators update reactively.
+ *  - Safe handling of missing budgets, zero budgets, and empty expense lists.
+ *  - Cache cleanup on account logout.
  */
 
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { supabase } from './supabase';
 import {
   CategorySpending,
   CreateExpenseInput,
@@ -41,18 +38,21 @@ import {
   validateExpenseDate,
   validateExpenseInput,
 } from '@/utils/expenseValidation';
-import { useSyncExternalStore } from 'react';
+import {
+  mapExpenseInputToInsert,
+  mapExpenseRowToDomain,
+  mapExpenseToUpdate,
+  mapTripBudgetRowToDomain,
+} from './mappers';
+import { ExpenseRow, TripBudgetRow } from '@/types/database.types';
 import { getAllTrips, getTripById } from './mockData';
+import { getCachedTrips } from './trip';
 
 // ---------------------------------------------------------------------------
-// 1. Initial Seed Data (Matches Existing Phase 4 & 5 Mock Dashboard Figures)
+// 1. Initial Seed Data (Development / Demo Routes Only)
 // ---------------------------------------------------------------------------
 
-/**
- * Seed expenses for 'japan-adventure'.
- * Sums to EXACTLY $1,240.50 (124050 cents) to match the existing Home & Overview mock data.
- */
-const INITIAL_SEED_EXPENSES: Expense[] = [
+export const INITIAL_SEED_EXPENSES: Expense[] = [
   {
     id: 'exp-japan-1',
     tripId: 'japan-adventure',
@@ -118,7 +118,6 @@ const INITIAL_SEED_EXPENSES: Expense[] = [
     createdAt: '2028-03-12T15:00:00.000Z',
     updatedAt: '2028-03-12T15:00:00.000Z',
   },
-  // Seed expense for 'swiss-alps' ($2,100.00 / budget $2,000.00 -> OVER BUDGET demo)
   {
     id: 'exp-swiss-1',
     tripId: 'swiss-alps',
@@ -134,10 +133,7 @@ const INITIAL_SEED_EXPENSES: Expense[] = [
   },
 ];
 
-/**
- * Seed budgets (separate from expenses).
- */
-const INITIAL_SEED_BUDGETS: [string, TripBudget][] = [
+export const INITIAL_SEED_BUDGETS: [string, TripBudget][] = [
   [
     'japan-adventure',
     {
@@ -167,6 +163,28 @@ const INITIAL_SEED_BUDGETS: [string, TripBudget][] = [
   ],
 ];
 
+const DEV_MOCK_TRIP_IDS = [
+  'japan-adventure',
+  'paris-getaway',
+  'swiss-alps',
+  'demo-trip',
+  'thailand-escape',
+];
+
+export function isDevMockTrip(tripId?: string): boolean {
+  if (!tripId) return false;
+  return DEV_MOCK_TRIP_IDS.includes(tripId);
+}
+
+export function isDevMockExpense(expenseId?: string): boolean {
+  if (!expenseId) return false;
+  return (
+    expenseId.startsWith('exp-japan-') ||
+    expenseId.startsWith('exp-swiss-') ||
+    expenseId.startsWith('exp-paris-')
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 2. In-Memory Store & Subscription Mechanism
 // ---------------------------------------------------------------------------
@@ -184,14 +202,11 @@ function notify(): void {
     try {
       listener();
     } catch (e) {
-      console.warn('Expense store listener error:', e);
+      console.warn('[Voyaro Expenses] Store listener error:', e);
     }
   });
 }
 
-/**
- * Normalize trip ID so 'demo-trip' maps to 'japan-adventure' seamlessly.
- */
 export function normalizeTripId(tripId?: string): string {
   if (!tripId || tripId === 'demo-trip') {
     return 'japan-adventure';
@@ -199,21 +214,68 @@ export function normalizeTripId(tripId?: string): string {
   return tripId;
 }
 
-/**
- * Verify that a trip ID actually exists in the app.
- */
 export function tripExists(tripId: string): boolean {
   const normalized = normalizeTripId(tripId);
-  return getAllTrips().some((t) => t.id === normalized);
+  if (isDevMockTrip(normalized)) return true;
+  const inMock = getAllTrips().some((t) => t.id === normalized);
+  if (inMock) return true;
+  const inCached = getCachedTrips()?.some((t) => t.id === normalized);
+  if (inCached) return true;
+  return false;
+}
+
+export function clearExpenseCache(): void {
+  expensesStore = typeof __DEV__ !== 'undefined' && __DEV__ ? [...INITIAL_SEED_EXPENSES] : [];
+  budgetsStore = typeof __DEV__ !== 'undefined' && __DEV__ ? new Map(INITIAL_SEED_BUDGETS) : new Map();
+  notify();
 }
 
 // ---------------------------------------------------------------------------
-// 3. Core Expense Operations (Read, Add, Update, Delete)
+// 3. Core Expense Operations (Fetch, Add, Update, Delete)
 // ---------------------------------------------------------------------------
 
 /**
- * Retrieve all expenses for a specific trip, sorted by date descending (newest first).
- * Safe for unknown trip IDs (returns []).
+ * Fetches expenses for a trip from Supabase, updates in-memory cache, and returns sorted expenses.
+ */
+export async function fetchExpensesByTrip(tripId?: string): Promise<Expense[]> {
+  const normalized = normalizeTripId(tripId);
+
+  // If this is a development mock trip, return local cached dataset
+  if (isDevMockTrip(tripId)) {
+    return getExpensesByTrip(normalized);
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return getExpensesByTrip(normalized);
+  }
+
+  const { data: rows, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('trip_id', normalized)
+    .order('expense_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(`[Voyaro Expenses] fetchExpensesByTrip error for ${tripId}:`, error.message);
+    throw new Error(`Failed to load expenses: ${error.message}`);
+  }
+
+  const domainExpenses = (rows as ExpenseRow[]).map(mapExpenseRowToDomain);
+
+  // Update in-memory store for this trip
+  expensesStore = [
+    ...expensesStore.filter((e) => e.tripId !== normalized),
+    ...domainExpenses,
+  ];
+  notify();
+
+  return getExpensesByTrip(normalized);
+}
+
+/**
+ * Synchronously retrieves cached expenses for a specific trip, sorted by date descending.
  */
 export function getExpensesByTrip(tripId?: string): Expense[] {
   const normalized = normalizeTripId(tripId);
@@ -223,15 +285,57 @@ export function getExpensesByTrip(tripId?: string): Expense[] {
 }
 
 /**
- * Retrieve all expenses across all trips (useful for global tab).
+ * Synchronously retrieves all cached expenses across all trips.
  */
 export function getAllExpenses(): Expense[] {
   return [...expensesStore].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 /**
- * Retrieve a single expense by its ID.
- * Safe for unknown IDs (returns undefined).
+ * Fetches a single expense by ID from Supabase and syncs cache.
+ */
+export async function fetchExpenseById(expenseId: string): Promise<Expense | null> {
+  if (!expenseId) return null;
+
+  if (isDevMockExpense(expenseId)) {
+    return getExpenseById(expenseId) || null;
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return getExpenseById(expenseId) || null;
+  }
+
+  const { data: row, error } = await supabase
+    .from('expenses')
+    .select('*')
+    .eq('id', expenseId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[Voyaro Expenses] fetchExpenseById error for ${expenseId}:`, error.message);
+    throw new Error(`Failed to load expense: ${error.message}`);
+  }
+
+  if (!row) {
+    return null;
+  }
+
+  const domainExpense = mapExpenseRowToDomain(row as ExpenseRow);
+
+  const index = expensesStore.findIndex((e) => e.id === expenseId);
+  if (index >= 0) {
+    expensesStore[index] = domainExpense;
+  } else {
+    expensesStore.push(domainExpense);
+  }
+  notify();
+
+  return domainExpense;
+}
+
+/**
+ * Synchronously retrieves a single expense from the cache by ID.
  */
 export function getExpenseById(expenseId: string): Expense | undefined {
   if (!expenseId) return undefined;
@@ -239,21 +343,17 @@ export function getExpenseById(expenseId: string): Expense | undefined {
 }
 
 /**
- * Add a new expense to the in-memory store.
- *
- * Requirements enforced:
- *  - Every expense must reference an existing trip ID.
- *  - Expense IDs must be unique.
- *  - Amount must be positive integer minor units.
- *  - Immediately notifies reactive subscribers.
+ * Persists a new expense to Supabase (or local store for mock trips).
+ * Validates trip ownership & inputs, preserving integer minor units.
  */
-export function addExpense(
+export async function addExpense(
   input: CreateExpenseInput | Expense
-): Expense {
+): Promise<Expense> {
   const normTripId = normalizeTripId(input.tripId);
 
-  // 1. Verify trip exists
-  if (!tripExists(normTripId)) {
+  // 1. Verify trip existence for non-UUID strings
+  const isLikelyUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normTripId);
+  if (!isLikelyUuid && !tripExists(normTripId)) {
     throw new Error(`Cannot add expense: Trip with ID "${input.tripId}" does not exist.`);
   }
 
@@ -267,58 +367,95 @@ export function addExpense(
     throw new Error(`Invalid expense data: ${firstErrorMessage}`);
   }
 
-  // 3. Ensure unique ID
-  let finalId = (input as Expense).id;
-  if (!finalId || expensesStore.some((e) => e.id === finalId)) {
-    finalId = `exp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  // 2. If dev mock trip, save locally
+  if (isDevMockTrip(normTripId)) {
+    let finalId = (input as Expense).id;
+    if (!finalId || expensesStore.some((e) => e.id === finalId)) {
+      finalId = `exp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    }
+
+    const nowIso = new Date().toISOString();
+    const newExpense: Expense = {
+      id: finalId,
+      tripId: normTripId,
+      title: input.title.trim(),
+      amount: Math.round(input.amount),
+      currency: input.currency,
+      category: input.category,
+      date: input.date.trim(),
+      paidBy: input.paidBy?.trim() || undefined,
+      notes: input.notes?.trim() || undefined,
+      createdAt: (input as Expense).createdAt || nowIso,
+      updatedAt: nowIso,
+    };
+
+    expensesStore = [newExpense, ...expensesStore];
+    syncMockTripSpending(normTripId);
+    notify();
+    return newExpense;
   }
 
-  const nowIso = new Date().toISOString();
+  // 3. Supabase insert
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to record an expense.');
+  }
 
-  const newExpense: Expense = {
-    id: finalId,
+  // Security check: verify trip access via RLS
+  const { data: tripRow, error: tripCheckError } = await supabase
+    .from('trips')
+    .select('id')
+    .eq('id', normTripId)
+    .maybeSingle();
+
+  if (tripCheckError || !tripRow) {
+    throw new Error('Cannot add expense: Trip does not exist or access is denied.');
+  }
+
+  const insertPayload = mapExpenseInputToInsert({
+    ...input,
     tripId: normTripId,
     title: input.title.trim(),
-    amount: Math.round(input.amount),
-    currency: input.currency,
-    category: input.category,
-    date: input.date.trim(),
-    paidBy: input.paidBy?.trim() || undefined,
     notes: input.notes?.trim() || undefined,
-    createdAt: (input as Expense).createdAt || nowIso,
-    updatedAt: nowIso,
-  };
+    paidBy: input.paidBy?.trim() || undefined,
+  });
 
-  expensesStore = [newExpense, ...expensesStore];
-  syncMockTripSpending(normTripId);
+  const { data: row, error } = await supabase
+    .from('expenses')
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Voyaro Expenses] addExpense error:', error.message);
+    throw new Error(`Failed to save expense: ${error.message}`);
+  }
+
+  const domainExpense = mapExpenseRowToDomain(row as ExpenseRow);
+
+  expensesStore = [domainExpense, ...expensesStore.filter((e) => e.id !== domainExpense.id)];
   notify();
-  return newExpense;
+
+  return domainExpense;
 }
 
 /**
- * Update an existing expense by ID.
- *
- * Requirements enforced:
- *  - Preserves original ID and tripId.
- *  - Handles unknown IDs safely (returns undefined).
- *  - Updates timestamp.
- *  - Immediately notifies reactive subscribers.
+ * Updates an existing expense in Supabase (or local store for mock items).
  */
-export function updateExpense(
+export async function updateExpense(
   expenseId: string,
   updates: UpdateExpenseInput
-): Expense | undefined {
+): Promise<Expense | undefined> {
   if (!expenseId) return undefined;
 
-  const index = expensesStore.findIndex((e) => e.id === expenseId);
-  if (index === -1) {
-    return undefined; // Unknown ID handled safely
+  const existing = getExpenseById(expenseId);
+  const isLikelyUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expenseId);
+  if (!isLikelyUuid && !existing) {
+    return undefined;
   }
 
-  const existing = expensesStore[index];
-
   // Validate title if updated
-  let finalTitle = existing.title;
+  let finalTitle = existing?.title;
   if (updates.title !== undefined) {
     if (!updates.title.trim()) {
       throw new Error('Expense title cannot be empty.');
@@ -327,7 +464,7 @@ export function updateExpense(
   }
 
   // Validate category if updated
-  let finalCategory = existing.category;
+  let finalCategory = existing?.category;
   if (updates.category !== undefined) {
     if (!EXPENSE_CATEGORIES.includes(updates.category)) {
       throw new Error(`Invalid expense category: ${updates.category}`);
@@ -336,9 +473,12 @@ export function updateExpense(
   }
 
   // Validate amount if updated
-  let finalAmount = existing.amount;
+  let finalAmount = existing?.amount;
   if (updates.amount !== undefined) {
-    const amountVal = validateExpenseAmount(updates.amount, updates.currency || existing.currency);
+    const amountVal = validateExpenseAmount(
+      updates.amount,
+      updates.currency || existing?.currency || 'USD'
+    );
     if (!amountVal.isValid) {
       throw new Error(`Invalid update amount: ${amountVal.error}`);
     }
@@ -346,7 +486,7 @@ export function updateExpense(
   }
 
   // Validate date if updated
-  let finalDate = existing.date;
+  let finalDate = existing?.date;
   if (updates.date !== undefined) {
     const dateVal = validateExpenseDate(updates.date);
     if (!dateVal.isValid) {
@@ -355,136 +495,204 @@ export function updateExpense(
     finalDate = updates.date.trim();
   }
 
-  let finalPaidBy = existing.paidBy;
-  if (updates.paidBy !== undefined) {
-    finalPaidBy = updates.paidBy.trim() ? updates.paidBy.trim() : undefined;
+  // If dev mock expense or dev trip, update locally
+  if (isDevMockExpense(expenseId) || isDevMockTrip(existing?.tripId)) {
+    if (!existing) return undefined;
+
+    const updatedExpense: Expense = {
+      ...existing,
+      id: existing.id,
+      tripId: existing.tripId,
+      title: finalTitle ?? existing.title,
+      amount: finalAmount ?? existing.amount,
+      currency: updates.currency || existing.currency,
+      category: finalCategory ?? existing.category,
+      date: finalDate ?? existing.date,
+      paidBy: updates.paidBy !== undefined ? updates.paidBy.trim() || undefined : existing.paidBy,
+      notes: updates.notes !== undefined ? updates.notes.trim() || undefined : existing.notes,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const index = expensesStore.findIndex((e) => e.id === expenseId);
+    if (index >= 0) {
+      expensesStore = [
+        ...expensesStore.slice(0, index),
+        updatedExpense,
+        ...expensesStore.slice(index + 1),
+      ];
+      syncMockTripSpending(existing.tripId);
+      notify();
+    }
+    return updatedExpense;
   }
 
-  let finalNotes = existing.notes;
-  if (updates.notes !== undefined) {
-    finalNotes = updates.notes.trim() ? updates.notes.trim() : undefined;
+  // Supabase update
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to update an expense.');
   }
 
-  const updatedExpense: Expense = {
-    ...existing,
-    id: existing.id,        // PRESERVED
-    tripId: existing.tripId, // PRESERVED
+  const updatePayload = mapExpenseToUpdate({
     title: finalTitle,
     amount: finalAmount,
-    currency: updates.currency || existing.currency,
+    currency: updates.currency,
     category: finalCategory,
     date: finalDate,
-    paidBy: finalPaidBy,
-    notes: finalNotes,
-    updatedAt: new Date().toISOString(),
-  };
+    paidBy: updates.paidBy !== undefined ? updates.paidBy.trim() || undefined : undefined,
+    notes: updates.notes !== undefined ? updates.notes.trim() || undefined : undefined,
+  });
 
-  expensesStore = [
-    ...expensesStore.slice(0, index),
-    updatedExpense,
-    ...expensesStore.slice(index + 1),
-  ];
+  const { data: row, error } = await supabase
+    .from('expenses')
+    .update(updatePayload)
+    .eq('id', expenseId)
+    .select()
+    .maybeSingle();
 
-  syncMockTripSpending(existing.tripId);
+  if (error) {
+    console.error(`[Voyaro Expenses] updateExpense error for ${expenseId}:`, error.message);
+    throw new Error(`Failed to update expense: ${error.message}`);
+  }
+
+  if (!row) {
+    return undefined;
+  }
+
+  const domainExpense = mapExpenseRowToDomain(row as ExpenseRow);
+
+  expensesStore = expensesStore.map((e) => (e.id === expenseId ? domainExpense : e));
   notify();
-  return updatedExpense;
+
+  return domainExpense;
 }
 
 /**
- * Delete an expense by ID.
- *
- * Requirements enforced:
- *  - Removes from shared store across all screens.
- *  - Handles unknown IDs safely (returns false).
- *  - Immediately notifies reactive subscribers.
+ * Deletes an expense by ID from Supabase (or local store for mock items).
  */
-export function deleteExpense(expenseId: string): boolean {
+export async function deleteExpense(expenseId: string): Promise<boolean> {
   if (!expenseId) return false;
 
-  const target = expensesStore.find((e) => e.id === expenseId);
-  if (!target) return false;
-
-  const prevLen = expensesStore.length;
-  expensesStore = expensesStore.filter((e) => e.id !== expenseId);
-  const deleted = expensesStore.length < prevLen;
-
-  if (deleted) {
-    syncMockTripSpending(target.tripId);
-    notify();
+  const target = getExpenseById(expenseId);
+  const isLikelyUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(expenseId);
+  if (!isLikelyUuid && !target) {
+    return false;
   }
 
-  return deleted;
+  // If dev mock expense or dev trip
+  if (isDevMockExpense(expenseId) || isDevMockTrip(target?.tripId)) {
+    const prevLen = expensesStore.length;
+    expensesStore = expensesStore.filter((e) => e.id !== expenseId);
+    const deleted = expensesStore.length < prevLen;
+    if (deleted && target) {
+      syncMockTripSpending(target.tripId);
+      notify();
+    }
+    return deleted;
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to delete an expense.');
+  }
+
+  const { data, error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('id', expenseId)
+    .select('id');
+
+  if (error) {
+    console.error(`[Voyaro Expenses] deleteExpense error for ${expenseId}:`, error.message);
+    throw new Error(`Failed to delete expense: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
+    return false;
+  }
+
+  expensesStore = expensesStore.filter((e) => e.id !== expenseId);
+  notify();
+
+  return true;
 }
 
 /**
  * Clear all expenses for a specific trip.
  */
-export function clearTripExpenses(tripId?: string): void {
-  const normalized = normalizeTripId(tripId);
-  expensesStore = expensesStore.filter((e) => e.tripId !== normalized);
-  syncMockTripSpending(normalized);
-  notify();
-}
-
-// ---------------------------------------------------------------------------
-// 4. Trip Budget Operations (Separate from expense records)
-// ---------------------------------------------------------------------------
-
-/**
- * Set the budget for a specific trip.
- * Stores budget amounts with their currency in minor units.
- */
-export function setTripBudget(
-  tripId: string,
-  amount: number | string,
-  currency: CurrencyCode = 'USD'
-): TripBudget {
+export async function clearTripExpenses(tripId?: string): Promise<void> {
   const normalized = normalizeTripId(tripId);
 
-  if (!tripExists(normalized)) {
-    throw new Error(`Cannot set budget: Trip with ID "${tripId}" does not exist.`);
-  }
-
-  // Convert amount safely into integer minor units
-  const minorUnits =
-    typeof amount === 'number' && Number.isInteger(amount) && amount >= 0
-      ? amount
-      : toMinorUnits(amount, currency);
-
-  if (minorUnits < 0 || isNaN(minorUnits)) {
-    throw new Error('Trip budget amount must be a non-negative number.');
-  }
-
-  const budget: TripBudget = {
-    tripId: normalized,
-    amount: minorUnits,
-    currency,
-    updatedAt: new Date().toISOString(),
-  };
-
-  budgetsStore.set(normalized, budget);
-  syncMockTripSpending(normalized);
-  notify();
-  return budget;
-}
-
-/**
- * Clear or unset the budget for a specific trip.
- * Safe for trips with or without a budget.
- */
-export function clearTripBudget(tripId: string): boolean {
-  const normalized = normalizeTripId(tripId);
-  const existed = budgetsStore.delete(normalized);
-  if (existed) {
+  if (isDevMockTrip(normalized)) {
+    expensesStore = expensesStore.filter((e) => e.tripId !== normalized);
     syncMockTripSpending(normalized);
     notify();
+    return;
   }
-  return existed;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    throw new Error('You must be logged in to clear expenses.');
+  }
+
+  const { error } = await supabase
+    .from('expenses')
+    .delete()
+    .eq('trip_id', normalized);
+
+  if (error) {
+    console.error(`[Voyaro Expenses] clearTripExpenses error for ${tripId}:`, error.message);
+    throw new Error(`Failed to clear expenses: ${error.message}`);
+  }
+
+  expensesStore = expensesStore.filter((e) => e.tripId !== normalized);
+  notify();
+}
+
+// ---------------------------------------------------------------------------
+// 4. Trip Budget Operations (Persisted to trip_budgets table)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches a trip's budget from Supabase, updates in-memory cache, and returns it.
+ */
+export async function fetchTripBudget(tripId: string): Promise<TripBudget | null> {
+  const normalized = normalizeTripId(tripId);
+
+  if (isDevMockTrip(normalized)) {
+    return getTripBudget(normalized) || null;
+  }
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return getTripBudget(normalized) || null;
+  }
+
+  const { data: row, error } = await supabase
+    .from('trip_budgets')
+    .select('*')
+    .eq('trip_id', normalized)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`[Voyaro Expenses] fetchTripBudget error for ${tripId}:`, error.message);
+    throw new Error(`Failed to load budget: ${error.message}`);
+  }
+
+  if (!row) {
+    budgetsStore.delete(normalized);
+    notify();
+    return null;
+  }
+
+  const domainBudget = mapTripBudgetRowToDomain(row as TripBudgetRow);
+  budgetsStore.set(normalized, domainBudget);
+  notify();
+
+  return domainBudget;
 }
 
 /**
- * Retrieve the budget for a specific trip.
- * Safe for unknown IDs (returns undefined).
+ * Synchronously retrieves the cached budget for a specific trip.
  */
 export function getTripBudget(tripId?: string): TripBudget | undefined {
   if (!tripId) return undefined;
@@ -492,12 +700,122 @@ export function getTripBudget(tripId?: string): TripBudget | undefined {
   return budgetsStore.get(normalized);
 }
 
+/**
+ * Sets or updates a trip's budget in Supabase.
+ * Strictly converts input major units into integer minor units (cents).
+ */
+export async function setTripBudget(
+  tripId: string,
+  amount: number | string,
+  currency: CurrencyCode = 'USD'
+): Promise<TripBudget> {
+  const normalized = normalizeTripId(tripId);
+
+  const minorUnits = toMinorUnits(amount, currency);
+
+  if (minorUnits < 0 || isNaN(minorUnits)) {
+    throw new Error('Trip budget amount must be a non-negative number.');
+  }
+
+  const isLikelyUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normalized);
+  if (!isLikelyUuid && !tripExists(normalized)) {
+    throw new Error(`Cannot set budget: Trip with ID "${tripId}" does not exist.`);
+  }
+
+  // If dev mock trip, save locally
+  if (isDevMockTrip(normalized)) {
+    const budget: TripBudget = {
+      tripId: normalized,
+      amount: minorUnits,
+      currency,
+      updatedAt: new Date().toISOString(),
+    };
+    budgetsStore.set(normalized, budget);
+    syncMockTripSpending(normalized);
+    notify();
+    return budget;
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to set a trip budget.');
+  }
+
+  // Verify trip ownership / access via RLS
+  const { data: tripRow, error: tripCheckError } = await supabase
+    .from('trips')
+    .select('id')
+    .eq('id', normalized)
+    .maybeSingle();
+
+  if (tripCheckError || !tripRow) {
+    throw new Error('Cannot set budget: Trip does not exist or access is denied.');
+  }
+
+  const { data: row, error } = await supabase
+    .from('trip_budgets')
+    .upsert({
+      trip_id: normalized,
+      amount: minorUnits,
+      currency,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error(`[Voyaro Expenses] setTripBudget error for ${tripId}:`, error.message);
+    throw new Error(`Failed to save trip budget: ${error.message}`);
+  }
+
+  const domainBudget = mapTripBudgetRowToDomain(row as TripBudgetRow);
+  budgetsStore.set(normalized, domainBudget);
+  notify();
+
+  return domainBudget;
+}
+
+/**
+ * Clears or deletes a trip's budget from Supabase.
+ */
+export async function clearTripBudget(tripId: string): Promise<boolean> {
+  const normalized = normalizeTripId(tripId);
+
+  if (isDevMockTrip(normalized)) {
+    const existed = budgetsStore.delete(normalized);
+    if (existed) {
+      syncMockTripSpending(normalized);
+      notify();
+    }
+    return existed;
+  }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError || !user) {
+    throw new Error('You must be logged in to clear a trip budget.');
+  }
+
+  const { error } = await supabase
+    .from('trip_budgets')
+    .delete()
+    .eq('trip_id', normalized);
+
+  if (error) {
+    console.error(`[Voyaro Expenses] clearTripBudget error for ${tripId}:`, error.message);
+    throw new Error(`Failed to clear trip budget: ${error.message}`);
+  }
+
+  budgetsStore.delete(normalized);
+  notify();
+
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // 5. Dependent Totals & Summary Aggregations
 // ---------------------------------------------------------------------------
 
 /**
- * Compute the live expense & budget summary for a given trip.
+ * Computes live expense & budget summary for a given trip from cache.
  * Automatically recalculates when expenses or budgets are updated.
  */
 export function getTripExpenseSummary(tripId?: string): TripExpenseSummary {
@@ -566,7 +884,7 @@ export function getTripExpenseSummary(tripId?: string): TripExpenseSummary {
 }
 
 /**
- * Synchronize derived totals into MOCK_TRIPS to keep legacy Phase 4 cards (Home, Trips list) in sync.
+ * Synchronize derived totals into MOCK_TRIPS to keep legacy cards in sync.
  */
 function syncMockTripSpending(tripId: string): void {
   const trip = getTripById(tripId);
@@ -615,15 +933,62 @@ export function getStoreRevision(): number {
 }
 
 /**
- * Reactive React hook that subscribes to all expenses for a specific trip.
- * Automatically re-renders screens whenever an expense is added, updated, deleted,
- * or when the trip budget changes.
+ * Reactive React hook that subscribes to all expenses and budget for a specific trip.
+ * Automatically fetches from Supabase and re-renders screens upon mutations.
  */
 export function useTripExpenses(tripId?: string) {
-  // Subscribes to the shared store via useSyncExternalStore
   useSyncExternalStore(subscribeToExpenses, getStoreRevision, getStoreRevision);
 
   const normalized = normalizeTripId(tripId);
+  const [loading, setLoading] = useState<boolean>(!isDevMockTrip(tripId) && Boolean(tripId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!tripId) {
+      return;
+    }
+    let isMounted = true;
+    Promise.all([
+      fetchExpensesByTrip(tripId),
+      fetchTripBudget(tripId),
+    ])
+      .then(() => {
+        if (isMounted) {
+          setError(null);
+        }
+      })
+      .catch((err: any) => {
+        if (isMounted) {
+          setError(err.message || 'Failed to load expenses.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId]);
+
+  const refresh = useCallback(async () => {
+    if (!tripId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await Promise.all([
+        fetchExpensesByTrip(tripId),
+        fetchTripBudget(tripId),
+      ]);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load expenses.');
+    } finally {
+      setLoading(false);
+    }
+  }, [tripId]);
+
   const expenses = getExpensesByTrip(normalized);
   const budget = getTripBudget(normalized);
   const summary = getTripExpenseSummary(normalized);
@@ -635,6 +1000,9 @@ export function useTripExpenses(tripId?: string) {
     summary,
     expenseCount: expenses.length,
     isEmpty: expenses.length === 0,
+    loading,
+    error,
+    refresh,
     addExpense,
     updateExpense,
     deleteExpense,
@@ -647,16 +1015,61 @@ export function useTripExpenses(tripId?: string) {
 
 /**
  * Reactive React hook that subscribes to a single expense item by ID.
- * Re-renders automatically when that specific expense changes or is deleted.
  */
 export function useExpense(expenseId?: string) {
   useSyncExternalStore(subscribeToExpenses, getStoreRevision, getStoreRevision);
+
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expenseId || getExpenseById(expenseId) || isDevMockExpense(expenseId)) {
+      return;
+    }
+    let isMounted = true;
+    fetchExpenseById(expenseId)
+      .then(() => {
+        if (isMounted) {
+          setError(null);
+        }
+      })
+      .catch((err: any) => {
+        if (isMounted) {
+          setError(err.message || 'Failed to load expense details.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [expenseId]);
+
+  const refresh = useCallback(async () => {
+    if (!expenseId || isDevMockExpense(expenseId)) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await fetchExpenseById(expenseId);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load expense details.');
+    } finally {
+      setLoading(false);
+    }
+  }, [expenseId]);
 
   const expense = expenseId ? getExpenseById(expenseId) : undefined;
 
   return {
     expense,
     exists: Boolean(expense),
+    loading,
+    error,
+    refresh,
     update: (changes: UpdateExpenseInput) =>
       expenseId ? updateExpense(expenseId, changes) : undefined,
     remove: () => (expenseId ? deleteExpense(expenseId) : false),
@@ -665,10 +1078,12 @@ export function useExpense(expenseId?: string) {
 
 /**
  * Reactive React hook that subscribes to the entire global expense list.
- * Useful for the main (tabs)/expenses screen.
  */
 export function useAllExpenses() {
   useSyncExternalStore(subscribeToExpenses, getStoreRevision, getStoreRevision);
+
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const allExpenses = getAllExpenses();
 
@@ -676,6 +1091,8 @@ export function useAllExpenses() {
     expenses: allExpenses,
     totalCount: allExpenses.length,
     isEmpty: allExpenses.length === 0,
+    loading,
+    error,
     addExpense,
     deleteExpense,
   };
@@ -686,18 +1103,22 @@ export function useAllExpenses() {
 // ---------------------------------------------------------------------------
 
 export const expenseStore = {
+  fetchExpensesByTrip,
   getExpensesByTrip,
+  fetchExpenseById,
   getExpenseById,
   getAllExpenses,
   addExpense,
   updateExpense,
   deleteExpense,
+  fetchTripBudget,
   setTripBudget,
   clearTripBudget,
   getTripBudget,
   getTripExpenseSummary,
   clearTripExpenses,
   resetExpenseSeedData,
+  clearExpenseCache,
   subscribe: subscribeToExpenses,
   useTripExpenses,
   useExpense,

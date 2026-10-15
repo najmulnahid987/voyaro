@@ -17,7 +17,7 @@
  *  - No backend, no persistence, strictly in-memory.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -32,7 +32,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { deleteExpense, useExpense } from '@/services/expenseStore';
-import { getTripById, getTripTravelers } from '@/services/mockData';
+import { getTripById, getTripTravelers, Traveler } from '@/services/mockData';
+import { getCachedTrips } from '@/services/trip';
+import { listTripMembers, fetchUserTripRole } from '@/services/collaboration';
 import { EXPENSE_CATEGORY_META, ExpenseCategory } from '@/types/expense';
 import { formatCurrency, getCurrencyConfig } from '@/utils/currencyUtils';
 import { formatItineraryDate } from '@/utils/itineraryDateUtils';
@@ -81,21 +83,47 @@ export default function ExpenseDetailScreen() {
 
   // 3. Trip & Traveler context
   const effectiveTripId = expense?.tripId || tripId || 'japan-adventure';
-  const trip = useMemo(() => getTripById(effectiveTripId), [effectiveTripId]);
-  const tripTravelers = useMemo(
-    () => getTripTravelers(effectiveTripId),
+  const trip = useMemo(
+    () => getCachedTrips()?.find((t) => t.id === effectiveTripId) || getTripById(effectiveTripId),
     [effectiveTripId]
   );
+  const [liveTravelers, setLiveTravelers] = useState<Traveler[]>(() => getTripTravelers(effectiveTripId));
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadCollab() {
+      try {
+        const [members, role] = await Promise.all([
+          listTripMembers(effectiveTripId),
+          fetchUserTripRole(effectiveTripId),
+        ]);
+        if (!isMounted) return;
+        if (members && members.length > 0) {
+          setLiveTravelers(members);
+        }
+        setUserRole(role);
+      } catch (err) {
+        console.warn('[ExpenseDetail] Error loading collaboration:', err);
+      }
+    }
+    loadCollab();
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
+
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
   // Payer display resolution
   const payerName = useMemo(() => {
     if (!expense?.paidBy) return null;
-    const traveler = tripTravelers.find((t) => t.id === expense.paidBy);
+    const traveler = liveTravelers.find((t) => t.id === expense.paidBy);
     if (traveler) {
       return `${traveler.name}${traveler.isCurrentUser ? ' (You)' : ''}`;
     }
     return expense.paidBy;
-  }, [expense, tripTravelers]);
+  }, [expense, liveTravelers]);
 
   // ---------------------------------------------------------------------------
   // Navigation Handlers
@@ -121,16 +149,23 @@ export default function ExpenseDetailScreen() {
     setShowDeleteConfirm(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (!expense) return;
-    const targetTripId = expense.tripId;
-    deleteExpense(expense.id);
-    setShowDeleteConfirm(false);
+  const handleConfirmDelete = async () => {
+    if (!expense || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const targetTripId = expense.tripId;
+      await deleteExpense(expense.id);
+      setShowDeleteConfirm(false);
 
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace(`/(tabs)/trips/${targetTripId}/expenses` as any);
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace(`/(tabs)/trips/${targetTripId}/expenses` as any);
+      }
+    } catch (err) {
+      console.error('Error deleting expense:', err);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -224,34 +259,38 @@ export default function ExpenseDetailScreen() {
         <Text style={styles.topBarTitle}>Expense Details</Text>
 
         <View style={styles.topBarActions}>
-          <Pressable
-            onPress={handleEditPress}
-            style={({ pressed }) => [
-              styles.iconCircleButton,
-              pressed && styles.buttonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Edit expense"
-          >
-            <Text style={styles.editIconText}>✎</Text>
-          </Pressable>
+          {userRole !== 'viewer' && (
+            <>
+              <Pressable
+                onPress={handleEditPress}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Edit expense"
+              >
+                <Text style={styles.editIconText}>✎</Text>
+              </Pressable>
 
-          <Pressable
-            onPress={handleDeletePress}
-            style={({ pressed }) => [
-              styles.deleteCircleButton,
-              pressed && styles.buttonPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Delete expense"
-          >
-            <Image
-              source={require('@/assets/images/icons/close.svg')}
-              style={styles.deleteIcon}
-              tintColor={colors.destructive}
-              contentFit="contain"
-            />
-          </Pressable>
+              <Pressable
+                onPress={handleDeletePress}
+                style={({ pressed }) => [
+                  styles.deleteCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Delete expense"
+              >
+                <Image
+                  source={require('@/assets/images/icons/close.svg')}
+                  style={styles.deleteIcon}
+                  tintColor={colors.destructive}
+                  contentFit="contain"
+                />
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
 

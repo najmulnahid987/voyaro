@@ -35,7 +35,7 @@ function assert(condition: boolean, message: string) {
   console.log(`✓ PASS: ${message}`);
 }
 
-export function runItineraryWorkflowIntegrationTests() {
+export async function runItineraryWorkflowIntegrationTests() {
   console.log('\n======================================================');
   console.log('--- Running Complete Phase 5 Itinerary Workflow Test ---');
   console.log('======================================================\n');
@@ -55,7 +55,7 @@ export function runItineraryWorkflowIntegrationTests() {
   // -------------------------------------------------------------------------
 
   // 2.1 Add Flight
-  const newFlight = addItem({
+  const newFlight = await addItem({
     tripId,
     type: 'flight',
     title: 'Flight to Osaka (ITM) (JL107)',
@@ -78,7 +78,7 @@ export function runItineraryWorkflowIntegrationTests() {
   assert(Boolean(newFlight.id), `Flight created with ID: ${newFlight.id}`);
 
   // 2.2 Add Hotel
-  const newHotel = addItem({
+  const newHotel = await addItem({
     tripId,
     type: 'hotel',
     title: 'Conrad Osaka',
@@ -101,7 +101,7 @@ export function runItineraryWorkflowIntegrationTests() {
   assert(Boolean(newHotel.id), `Hotel created with ID: ${newHotel.id}`);
 
   // 2.3 Add Activity
-  const newActivity = addItem({
+  const newActivity = await addItem({
     tripId,
     type: 'activity',
     title: 'Dotonbori Street Food & River Cruise',
@@ -119,7 +119,7 @@ export function runItineraryWorkflowIntegrationTests() {
   assert(Boolean(newActivity.id), `Activity created with ID: ${newActivity.id}`);
 
   // 2.4 Add Transportation
-  const newTransport = addItem({
+  const newTransport = await addItem({
     tripId,
     type: 'transportation',
     title: 'Kintetsu Limited Express (Aoniyoshi)',
@@ -183,7 +183,7 @@ export function runItineraryWorkflowIntegrationTests() {
   // -------------------------------------------------------------------------
 
   // 5.1 Edit Flight
-  const editedFlight = updateItem(newFlight.id, {
+  const editedFlight = await updateItem(newFlight.id, {
     metadata: { seat: '1A', terminal: '2', gate: '12B', cabinClass: 'business' },
     notes: 'Upgraded to business class. Front row.',
   });
@@ -192,7 +192,7 @@ export function runItineraryWorkflowIntegrationTests() {
   assert(getItems(tripId).length === baselineCount + 4, 'No duplicate created on flight edit');
 
   // 5.2 Edit Hotel
-  const editedHotel = updateItem(newHotel.id, {
+  const editedHotel = await updateItem(newHotel.id, {
     notes: 'Anniversary stay. Champagne requested.',
     metadata: { guestName: 'Alex Johnson & Guest' },
   });
@@ -201,7 +201,7 @@ export function runItineraryWorkflowIntegrationTests() {
   assert(getItems(tripId).length === baselineCount + 4, 'No duplicate created on hotel edit');
 
   // 5.3 Edit Activity
-  const editedAct = updateItem(newActivity.id, {
+  const editedAct = await updateItem(newActivity.id, {
     title: 'VIP Dotonbori Private Food & Cruise Tour',
     metadata: { category: 'Adventure', duration: '3.0 hours' },
   });
@@ -213,7 +213,7 @@ export function runItineraryWorkflowIntegrationTests() {
   // 5.4 Edit Transportation with Date/Time Change
   // Move train from March 15 to early morning March 10 (becoming the very first item)
   const earlierIso = '2028-03-10T05:00:00.000Z';
-  const editedTrans = updateItem(newTransport.id, {
+  const editedTrans = await updateItem(newTransport.id, {
     startDateTime: earlierIso,
     metadata: { seat: 'Car 1, Salon Seat 1' },
   });
@@ -230,22 +230,22 @@ export function runItineraryWorkflowIntegrationTests() {
   // -------------------------------------------------------------------------
 
   // 6.1 Delete Flight
-  assert(deleteItem(newFlight.id) === true, 'Flight deleted successfully');
+  assert((await deleteItem(newFlight.id)) === true, 'Flight deleted successfully');
   assert(getItem(newFlight.id) === undefined, 'Flight no longer found in store');
   assert(getItems(tripId).length === baselineCount + 3, 'Store count decremented by 1');
 
   // 6.2 Delete Hotel
-  assert(deleteItem(newHotel.id) === true, 'Hotel deleted successfully');
+  assert((await deleteItem(newHotel.id)) === true, 'Hotel deleted successfully');
   assert(getItem(newHotel.id) === undefined, 'Hotel no longer found in store');
   assert(getItems(tripId).length === baselineCount + 2, 'Store count decremented by 2');
 
   // 6.3 Delete Activity
-  assert(deleteItem(newActivity.id) === true, 'Activity deleted successfully');
+  assert((await deleteItem(newActivity.id)) === true, 'Activity deleted successfully');
   assert(getItem(newActivity.id) === undefined, 'Activity no longer found in store');
   assert(getItems(tripId).length === baselineCount + 1, 'Store count decremented by 3');
 
   // 6.4 Delete Transportation
-  assert(deleteItem(newTransport.id) === true, 'Transportation deleted successfully');
+  assert((await deleteItem(newTransport.id)) === true, 'Transportation deleted successfully');
   assert(getItem(newTransport.id) === undefined, 'Transportation no longer found in store');
   assert(getItems(tripId).length === baselineCount, 'Store returned to baseline count');
 

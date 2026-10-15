@@ -108,7 +108,7 @@ export function TripBudgetModal({
   // Action Handlers
   // ---------------------------------------------------------------------------
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isSaving) return;
 
     const trimmed = amountStr.trim();
@@ -132,23 +132,27 @@ export function TripBudgetModal({
     setIsSaving(true);
 
     try {
-      const minorUnits = toMinorUnits(trimmed, currency);
-      const saved = setTripBudget(tripId, minorUnits, currency);
+      const saved = await setTripBudget(tripId, cleanNum, currency);
       onSave?.(saved);
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to save budget.');
+    } finally {
       setIsSaving(false);
     }
   };
 
-  const handleClear = () => {
+  const handleClear = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
-      clearTripBudget(tripId);
+      await clearTripBudget(tripId);
       onClear?.();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to clear budget.');
+    } finally {
+      setIsSaving(false);
     }
   };
 

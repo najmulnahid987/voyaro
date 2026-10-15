@@ -14,8 +14,9 @@
  *   - Seamless submission into centralized in-memory itinerary state and automatic return to timeline
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,6 +31,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { fetchUserTripRole } from '@/services/collaboration';
 import { ConcreteItineraryItem, HotelMetadata } from '@/types/itinerary';
 import { formatItineraryDate, parseDate } from '@/utils/itineraryDateUtils';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
@@ -114,6 +116,19 @@ export default function AddHotelScreen() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (effectiveTripId) {
+      fetchUserTripRole(effectiveTripId).then((r) => {
+        if (isMounted) setUserRole(r);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -134,9 +149,17 @@ export default function AddHotelScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    if (userRole === 'viewer') {
+      Alert.alert('Permission Denied', 'Viewers have read-only access and cannot create or modify hotel reservations.');
+      return;
+    }
+
     if (!validate()) return;
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, submit: '' }));
 
     try {
       // 1. Construct ISO Date-Time strings
@@ -146,9 +169,9 @@ export default function AddHotelScreen() {
       const endIso = `${checkOutDateStr}T${toTimeStr(checkOutObj)}:00.000Z`;
       const nightsCount = calculateNights(checkInDateStr, checkOutDateStr);
 
-      // 2. Add or Update in In-Memory Store
+      // 2. Add or Update in Supabase Store
       if (isEditMode && itemId) {
-        updateItem(itemId, {
+        await updateItem(itemId, {
           title: hotelName.trim(),
           startDateTime: startIso,
           endDateTime: endIso,
@@ -168,8 +191,7 @@ export default function AddHotelScreen() {
           },
         });
       } else {
-        const newHotel: ConcreteItineraryItem = {
-          id: `itin-hotel-${Date.now()}`,
+        await addItem({
           tripId: effectiveTripId,
           type: 'hotel',
           title: hotelName.trim(),
@@ -188,8 +210,7 @@ export default function AddHotelScreen() {
             roomType: room.trim() || undefined,
             nightsCount,
           },
-        };
-        addItem(newHotel);
+        });
       }
 
       // 3. Return to previous screen
@@ -198,9 +219,13 @@ export default function AddHotelScreen() {
       } else {
         router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Error saving hotel:', e);
       setIsSubmitting(false);
+      setErrors((prev) => ({
+        ...prev,
+        submit: e.message || 'Failed to save hotel. Please check the details and try again.',
+      }));
     }
   };
 
@@ -276,6 +301,12 @@ export default function AddHotelScreen() {
               />
             </Pressable>
           </View>
+
+          {errors.submit ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{errors.submit}</Text>
+            </View>
+          ) : null}
 
           {/* ── 2. Hotel Basics Section ──────────────────────────────────── */}
           <View style={styles.section}>
@@ -927,5 +958,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: 'rgba(176, 74, 74, 0.30)',
+  },
+  errorBannerText: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.error,
+    textAlign: 'center',
   },
 });

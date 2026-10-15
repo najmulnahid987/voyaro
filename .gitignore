@@ -31,7 +31,9 @@ yarn-error.*
 *.pem
 
 # local env files
-.env*.local
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -49,3 +51,6 @@ scratch/
 .vercel/
 
 .vercel
+
+# supabase
+supabase/.temp/

@@ -31,7 +31,7 @@ function assert(condition: boolean, message: string) {
   console.log(`✓ PASS: ${message}`);
 }
 
-export function runFlightWorkflowTests() {
+export async function runFlightWorkflowTests() {
   console.log('\n========================================');
   console.log('--- Running Focused Flight Workflow Test ---');
   console.log('========================================\n');
@@ -75,7 +75,7 @@ export function runFlightWorkflowTests() {
     },
   };
 
-  const addedFlight = addItem(newFlightInput);
+  const addedFlight = await addItem(newFlightInput);
   assert(Boolean(addedFlight.id), `Flight added with generated id: ${addedFlight.id}`);
   assert(addedFlight.title === 'Flight to Tokyo (NRT) (SQ638)', 'Flight title matches input');
   assert(
@@ -162,7 +162,7 @@ export function runFlightWorkflowTests() {
   // -------------------------------------------------------------------------
   // 7. Update Item Verification
   // -------------------------------------------------------------------------
-  const updatedFlight = updateItem(addedFlight.id, {
+  const updatedFlight = await updateItem(addedFlight.id, {
     notes: 'Updated seat to 12A.',
     metadata: { seat: '12A' },
   });
@@ -179,7 +179,7 @@ export function runFlightWorkflowTests() {
   // -------------------------------------------------------------------------
   // 8. Delete Item Verification
   // -------------------------------------------------------------------------
-  const deleteResult = deleteItem(addedFlight.id);
+  const deleteResult = await deleteItem(addedFlight.id);
   assert(deleteResult === true, 'deleteItem returns true upon success');
   const itemsAfterDelete = getItems(tripId);
   assert(

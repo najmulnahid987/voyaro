@@ -15,8 +15,9 @@
  *   - Seamless submission into in-memory itinerary state and automatic return to timeline
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -30,6 +31,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { fetchUserTripRole } from '@/services/collaboration';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConcreteItineraryItem, FlightMetadata } from '@/types/itinerary';
 import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
@@ -134,6 +136,19 @@ export default function AddFlightScreen() {
   const [isClassPickerOpen, setIsClassPickerOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (effectiveTripId) {
+      fetchUserTripRole(effectiveTripId).then((r) => {
+        if (isMounted) setUserRole(r);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -206,9 +221,17 @@ export default function AddFlightScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    if (userRole === 'viewer') {
+      Alert.alert('Permission Denied', 'Viewers have read-only access and cannot create or modify flight reservations.');
+      return;
+    }
+
     if (!validate()) return;
     setIsSubmitting(true);
+    setErrors((prev) => ({ ...prev, submit: '' }));
 
     try {
       // 1. Construct ISO Date-Time strings
@@ -219,9 +242,9 @@ export default function AddFlightScreen() {
       const startIso = `${depDateStr}T${depTimeStr}:00.000Z`;
       const endIso = `${arrDateStr}T${arrTimeStr}:00.000Z`;
 
-      // 2. Add or Update in In-Memory Store
+      // 2. Add or Update in Supabase Store
       if (isEditMode && itemId) {
-        updateItem(itemId, {
+        await updateItem(itemId, {
           title: `Flight to ${arrivalCode || arrivalAirport} (${flightNumber.toUpperCase()})`,
           startDateTime: startIso,
           endDateTime: endIso,
@@ -243,8 +266,7 @@ export default function AddFlightScreen() {
           },
         });
       } else {
-        const newFlight: ConcreteItineraryItem = {
-          id: `itin-flight-${Date.now()}`,
+        await addItem({
           tripId: effectiveTripId,
           type: 'flight',
           title: `Flight to ${arrivalCode || arrivalAirport} (${flightNumber.toUpperCase()})`,
@@ -265,8 +287,7 @@ export default function AddFlightScreen() {
             arrivalCity: arrivalAirport.split(',')[0].trim(),
             cabinClass: cabinClass.toLowerCase() as any,
           },
-        };
-        addItem(newFlight);
+        });
       }
 
       // 3. Navigate back to previous screen
@@ -275,9 +296,13 @@ export default function AddFlightScreen() {
       } else {
         router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Error saving flight:', e);
       setIsSubmitting(false);
+      setErrors((prev) => ({
+        ...prev,
+        submit: e.message || 'Failed to save flight. Please check the details and try again.',
+      }));
     }
   };
 
@@ -348,6 +373,12 @@ export default function AddFlightScreen() {
               />
             </Pressable>
           </View>
+
+          {errors.submit ? (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>{errors.submit}</Text>
+            </View>
+          ) : null}
 
           {/* ── 2. Flight Basics Section ─────────────────────────────────── */}
           <View style={styles.section}>
@@ -1352,5 +1383,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: colors.textSecondary,
+  },
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: 'rgba(176, 74, 74, 0.30)',
+  },
+  errorBannerText: {
+    ...typography.body,
+    fontSize: 13,
+    color: colors.error,
+    textAlign: 'center',
   },
 });

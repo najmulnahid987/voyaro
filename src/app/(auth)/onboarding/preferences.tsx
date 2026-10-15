@@ -13,7 +13,7 @@ import { Button, OnboardingHeader } from '@/components/ui';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 
 interface PaceOption {
-  id: string;
+  id: TravelPace;
   title: string;
   description: string;
   unselectedIcon?: any;
@@ -40,21 +40,46 @@ const PACE_OPTIONS: PaceOption[] = [
   },
 ];
 
+import { useAuth } from '@/services/AuthContext';
+import { saveTravelPace, TravelPace } from '@/services/profile';
+
 /**
  * Route: /(auth)/onboarding/preferences
  * Onboarding Step 3 of 4: "How do you like to travel?"
  */
 export default function PreferencesScreen() {
-  // Default selection is 'balanced' per Google Stitch design
-  const [selectedPace, setSelectedPace] = useState<string>('balanced');
+  const { profile } = useAuth();
+  // Default selection is profile's pace if set, otherwise 'balanced'
+  const [selectedPace, setSelectedPace] = useState<TravelPace>(
+    (profile?.travelPace as TravelPace) || 'balanced'
+  );
+  const [saving, setSaving] = useState(false);
 
-  const handleContinue = () => {
-    router.push('/(auth)/onboarding/ready');
+  // Sync with profile if loaded
+  React.useEffect(() => {
+    if (profile?.travelPace) {
+      setSelectedPace(profile.travelPace as TravelPace);
+    }
+  }, [profile?.travelPace]);
+
+  const handleContinue = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await saveTravelPace(selectedPace);
+      router.push('/(auth)/onboarding/ready');
+    } catch (err) {
+      console.warn('[Voyaro Onboarding] Failed to save travel pace:', err);
+      router.push('/(auth)/onboarding/ready');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSkip = () => {
     router.push('/(auth)/onboarding/ready');
   };
+
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -152,7 +177,9 @@ export default function PreferencesScreen() {
       <View style={styles.bottomBar}>
         <Button
           variant="primary"
-          label="Continue"
+          label={saving ? 'Saving...' : 'Continue'}
+          loading={saving}
+          disabled={saving}
           rightIcon={
             <Image
               source={require('@/assets/images/onboarding/arrow-right.svg')}

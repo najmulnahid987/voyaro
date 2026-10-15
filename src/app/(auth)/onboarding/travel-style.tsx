@@ -12,8 +12,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, OnboardingHeader } from '@/components/ui';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 
+import { useAuth } from '@/services/AuthContext';
+import { saveTravelStyle, TravelStyle } from '@/services/profile';
+
 interface TravelStyleOption {
-  id: string;
+  id: TravelStyle;
   label: string;
   icon: any;
 }
@@ -51,12 +54,34 @@ const TRAVEL_STYLES: TravelStyleOption[] = [
  * Onboarding Step 1 of 4: "What kind of traveler are you?"
  */
 export default function TravelStyleScreen() {
-  const [selectedStyle, setSelectedStyle] = useState<string>('solo');
+  const { profile } = useAuth();
+  const [selectedStyle, setSelectedStyle] = useState<TravelStyle>(
+    (profile?.travelStyle as TravelStyle) || 'solo'
+  );
+  const [saving, setSaving] = useState(false);
 
-  const handleNext = () => {
-    if (!selectedStyle) return;
-    router.push('/(auth)/onboarding/interests');
+  // Sync with existing profile if loaded
+  React.useEffect(() => {
+    if (profile?.travelStyle) {
+      setSelectedStyle(profile.travelStyle as TravelStyle);
+    }
+  }, [profile?.travelStyle]);
+
+  const handleNext = async () => {
+    if (!selectedStyle || saving) return;
+
+    setSaving(true);
+    try {
+      await saveTravelStyle(selectedStyle);
+      router.push('/(auth)/onboarding/interests');
+    } catch (err) {
+      console.warn('[Voyaro Onboarding] Failed to save travel style:', err);
+      router.push('/(auth)/onboarding/interests');
+    } finally {
+      setSaving(false);
+    }
   };
+
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -204,8 +229,9 @@ export default function TravelStyleScreen() {
       <View style={styles.bottomBar}>
         <Button
           variant="primary"
-          label="Next Step"
-          disabled={!selectedStyle}
+          label={saving ? 'Saving...' : 'Next Step'}
+          loading={saving}
+          disabled={!selectedStyle || saving}
           rightIcon={
             <Image
               source={require('@/assets/images/onboarding/arrow-right.svg')}

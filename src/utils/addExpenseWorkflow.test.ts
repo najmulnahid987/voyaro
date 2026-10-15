@@ -32,7 +32,7 @@ function assert(condition: boolean, message: string) {
   console.log(`✓ PASS: ${message}`);
 }
 
-export function runAddExpenseWorkflowTests() {
+export async function runAddExpenseWorkflowTests() {
   console.log('\n--- Running Add Expense Workflow & Validation Test Suite (Step 3) ---\n');
 
   // Start with clean initial seed state
@@ -120,7 +120,7 @@ export function runAddExpenseWorkflowTests() {
   console.log('\n4. Testing successful saving flow...');
 
   const newExpenseAmount = 4550; // $45.50
-  const savedExpense = addExpense({
+  const savedExpense = await addExpense({
     tripId: 'japan-adventure',
     title: 'Izakaya Gion Dinner',
     amount: newExpenseAmount,
@@ -157,7 +157,7 @@ export function runAddExpenseWorkflowTests() {
   // 5. Edit Mode Verification
   // -------------------------------------------------------------------------
   console.log('\n5. Testing edit mode updates...');
-  const updatedExpense = updateExpense(savedExpense.id, {
+  const updatedExpense = await updateExpense(savedExpense.id, {
     title: 'Izakaya Gion Banquet (Upgraded)',
     amount: 7500, // $75.00 (was $45.50)
   });

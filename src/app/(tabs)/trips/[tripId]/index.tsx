@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Platform,
   Pressable,
   ScrollView,
@@ -10,35 +12,77 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { getTripById, Trip } from '@/services/mockData';
+import { Trip, getTripById as getDevMockTripById } from '@/services/mockData';
+import { fetchTripById, deleteTrip } from '@/services/trip';
+import { leaveTrip } from '@/services/collaboration';
+import { AvatarGroup, Badge } from '@/components/ui';
 import { useShellInsets } from '@/components/navigation';
 
 /**
- * Route: /(tabs)/trips/[tripId] — Trip Overview / Dashboard (Phase 4)
+ * Route: /(tabs)/trips/[tripId] — Trip Overview / Dashboard (Phase 7 — Step 7)
  *
- * Visual Source of Truth: Google Stitch Trip Overview design (trip-overview.png & trip-overview.html)
- * Command center answering:
- *   - Destination, dates, duration, travelers, budget, planned items
- *   - "Next up" flight hero card with airport codes, times, gate, terminal, seat
- *   - "Your Itinerary" day-by-day timeline with item detail links
- *   - "Trip Spending" progress and budget summary
- *   - "Map" preview card
- *
- * Links to sub-routes:
- *   - /share/[tripId]
- *   - /(tabs)/trips/[tripId]/itinerary
- *   - /(tabs)/trips/[tripId]/budget
- *   - /(tabs)/trips/[tripId]/expenses
- *   - /(tabs)/trips/[tripId]/map
- *   - /(tabs)/trips/[tripId]/travelers
- *   - /(tabs)/trips/[tripId]/documents
- *   - /(tabs)/trips/[tripId]/settings
- *   - /itinerary/[itemId]
+ * Real Supabase Trip Persistence:
+ *   - Fetches live trip details owned by authenticated user
+ *   - Respects RLS: displays error state if trip does not exist or user lacks access
+ *   - Edit Trip: routes to create screen with tripId prefill
+ *   - Delete Trip: confirms and deletes from Supabase with cascade cleanup
+ *   - Initial loading state and error retry handling
  */
 export default function TripOverviewScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
-  const trip = getTripById(tripId || 'demo-trip') || getTripById('japan-adventure')!;
+
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isMountedRef = React.useRef(true);
+
+  const loadTrip = async () => {
+    if (!tripId) {
+      if (isMountedRef.current) {
+        setError('Trip ID is required.');
+        setLoading(false);
+      }
+      return;
+    }
+    if (isMountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
+
+    try {
+      // 1. Fetch live trip from Supabase
+      const realTrip = await fetchTripById(tripId);
+      if (!isMountedRef.current) return;
+
+      if (realTrip) {
+        setTrip(realTrip);
+      } else if (__DEV__ && (tripId === 'demo-trip' || tripId === 'japan-adventure')) {
+        // Explicit dev-only mock fallback for initial development routes
+        const devMock = getDevMockTripById(tripId);
+        setTrip(devMock || null);
+      } else {
+        setError('Trip not found or you do not have permission to view it.');
+      }
+    } catch (err: any) {
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to load trip details.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadTrip();
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [tripId]);
 
   const handleBackPress = () => {
     if (router.canGoBack()) {
@@ -49,15 +93,82 @@ export default function TripOverviewScreen() {
   };
 
   const handleSharePress = () => {
-    router.push(`/share/${trip.id}`);
+    if (trip) {
+      router.push(`/share/${trip.id}`);
+    }
   };
 
   const handleEditPress = () => {
-    router.push('/(tabs)/trips/create');
+    if (!trip) return;
+    if (trip.userRole === 'viewer') {
+      Alert.alert('Read-only Permission', 'Viewers cannot edit trip details.');
+      return;
+    }
+    router.push(`/(tabs)/trips/create?tripId=${trip.id}`);
+  };
+
+  const handleDeletePress = () => {
+    if (!trip || isDeleting) return;
+
+    // Non-owners leave the trip instead of deleting it
+    if (trip.isOwner === false) {
+      Alert.alert(
+        'Leave Trip',
+        `Are you sure you want to leave "${trip.title}"? You will lose access to its itinerary and expenses.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Leave Trip',
+            style: 'destructive',
+            onPress: async () => {
+              if (isDeleting) return;
+              setIsDeleting(true);
+              try {
+                await leaveTrip(trip.id);
+                router.replace('/(tabs)/trips');
+              } catch (err: any) {
+                if (isMountedRef.current) {
+                  setIsDeleting(false);
+                }
+                Alert.alert('Error', err.message || 'Failed to leave trip.');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Delete Trip',
+      `Are you sure you want to delete "${trip.title}"? This will permanently delete all associated itinerary items and expenses.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (isDeleting) return;
+            setIsDeleting(true);
+            try {
+              await deleteTrip(trip.id);
+              router.replace('/(tabs)/trips');
+            } catch (err: any) {
+              if (isMountedRef.current) {
+                setIsDeleting(false);
+              }
+              Alert.alert('Error', err.message || 'Failed to delete trip.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleItineraryPress = () => {
-    router.push(`/(tabs)/trips/${trip.id}/itinerary`);
+    if (trip) {
+      router.push(`/(tabs)/trips/${trip.id}/itinerary`);
+    }
   };
 
   const handleItineraryItemPress = (itemId: string) => {
@@ -65,12 +176,51 @@ export default function TripOverviewScreen() {
   };
 
   const handleBudgetPress = () => {
-    router.push(`/(tabs)/trips/${trip.id}/budget`);
+    if (trip) {
+      router.push(`/(tabs)/trips/${trip.id}/budget`);
+    }
   };
 
   const handleMapPress = () => {
-    router.push(`/(tabs)/trips/${trip.id}/map`);
+    if (trip) {
+      router.push(`/(tabs)/trips/${trip.id}/map`);
+    }
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.safeArea, styles.centeredContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading trip details...</Text>
+      </View>
+    );
+  }
+
+  if (error || !trip) {
+    return (
+      <View style={[styles.safeArea, styles.centeredContainer]}>
+        <View style={styles.errorIconCircle}>
+          <Image
+            source={require('@/assets/images/icons/close.svg')}
+            style={styles.errorIcon}
+            contentFit="contain"
+          />
+        </View>
+        <Text style={styles.errorTitle}>Unable to View Trip</Text>
+        <Text style={styles.errorSubtitle}>
+          {error || 'This trip could not be found or has been removed.'}
+        </Text>
+        <View style={styles.errorActionsRow}>
+          <Pressable onPress={handleBackPress} style={styles.backButton}>
+            <Text style={styles.backButtonText}>← All Trips</Text>
+          </Pressable>
+          <Pressable onPress={loadTrip} style={styles.retryButton}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.safeArea}>
@@ -85,12 +235,20 @@ export default function TripOverviewScreen() {
         <View style={styles.container}>
           {/* ── 1. Destination Subtitle, Actions & Metrics ─────────────────── */}
           <View style={styles.heroWrapper}>
-            {/* Subtitle & Quick Actions (Share, Edit) */}
+            {/* Subtitle & Quick Actions (Share, Edit, Delete) */}
             <View style={styles.topBar}>
-              <Text style={styles.tripSubtitle}>
-                {trip.destination}{' '}
-                <Text style={styles.bulletDot}>·</Text> Mar 10 — 20
-              </Text>
+              <View style={styles.topBarLeft}>
+                <Text style={styles.tripSubtitle}>
+                  {trip.destination}{' '}
+                  <Text style={styles.bulletDot}>·</Text> {trip.dates}
+                </Text>
+                {trip.userRole && trip.userRole !== 'owner' && (
+                  <Badge
+                    label={trip.userRole.toUpperCase()}
+                    variant={trip.userRole === 'editor' ? 'selected' : 'default'}
+                  />
+                )}
+              </View>
 
               <View style={styles.topBarRight}>
                 <Pressable
@@ -105,16 +263,31 @@ export default function TripOverviewScreen() {
                   <Text style={styles.actionIconText}>↗</Text>
                 </Pressable>
 
+                {trip.isOwner !== false && (
+                  <Pressable
+                    onPress={handleEditPress}
+                    style={({ pressed }) => [
+                      styles.glassButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Edit trip"
+                  >
+                    <View style={styles.pencilShape} />
+                  </Pressable>
+                )}
+
                 <Pressable
-                  onPress={handleEditPress}
+                  onPress={handleDeletePress}
                   style={({ pressed }) => [
                     styles.glassButton,
+                    styles.deleteGlassButton,
                     pressed && styles.buttonPressed,
                   ]}
                   accessibilityRole="button"
-                  accessibilityLabel="Edit trip"
+                  accessibilityLabel={trip.isOwner !== false ? "Delete trip" : "Leave trip"}
                 >
-                  <View style={styles.pencilShape} />
+                  <Text style={styles.deleteIconText}>{trip.isOwner !== false ? "✕" : "⇥"}</Text>
                 </Pressable>
               </View>
             </View>
@@ -130,10 +303,18 @@ export default function TripOverviewScreen() {
                 <Text style={styles.metricValue}>12 Days</Text>
               </View>
 
-              <View style={styles.metricCard}>
+              <Pressable
+                onPress={() => router.push(`/(tabs)/trips/${trip.id}/travelers`)}
+                style={({ pressed }) => [
+                  styles.metricCard,
+                  pressed && styles.cardPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="View travelers"
+              >
                 <Text style={styles.metricLabel}>TRAVELERS</Text>
                 <Text style={styles.metricValue}>{trip.travelerCount}</Text>
-              </View>
+              </Pressable>
 
               <View style={styles.metricCard}>
                 <Text style={styles.metricLabel}>BUDGET</Text>
@@ -147,6 +328,53 @@ export default function TripOverviewScreen() {
                 </Text>
               </View>
             </ScrollView>
+
+            {/* Travelers & Companions Strip */}
+            <Pressable
+              onPress={() => router.push(`/(tabs)/trips/${trip.id}/travelers`)}
+              style={({ pressed }) => [
+                styles.travelersStripCard,
+                pressed && styles.cardPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="View all trip travelers"
+            >
+              <View style={styles.travelersStripLeft}>
+                <AvatarGroup
+                  avatars={(trip.travelers || []).map((t) => ({
+                    name: t.name,
+                    source: t.avatarUrl,
+                  }))}
+                  size="xs"
+                  max={4}
+                />
+                <View style={styles.travelersStripText}>
+                  <Text style={styles.travelersStripTitle}>
+                    {trip.travelers && trip.travelers.length > 0
+                      ? `${trip.travelers.length} ${trip.travelers.length === 1 ? 'Traveler' : 'Travelers'}`
+                      : `${trip.travelerCount} Travelers`}
+                  </Text>
+                  <Text style={styles.travelersStripSub}>
+                    {trip.isOwner
+                      ? 'Tap to manage collaborators'
+                      : `You: ${trip.userRole?.toUpperCase() || 'MEMBER'}`}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.travelersStripRight}>
+                {trip.isOwner && (
+                  <View style={styles.addTravelerChip}>
+                    <Text style={styles.addTravelerChipText}>+ Invite</Text>
+                  </View>
+                )}
+                <Image
+                  source={require('@/assets/images/onboarding/arrow-right.svg')}
+                  style={styles.stripChevron}
+                  contentFit="contain"
+                />
+              </View>
+            </Pressable>
           </View>
 
           {/* ── 2. "Next up" Featured Flight Card ─────────────────────────── */}
@@ -571,6 +799,69 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: '600',
     color: colors.primary,
+  },
+
+  // ── Travelers Strip Card ──────────────────────────────────────────────────
+  topBarLeft: {
+    flex: 1,
+    gap: 4,
+  },
+  travelersStripCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginHorizontal: 20,
+    marginTop: spacing.xs,
+    ...shadows.card,
+  },
+  travelersStripLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+  },
+  travelersStripText: {
+    gap: 2,
+    flex: 1,
+  },
+  travelersStripTitle: {
+    ...typography.body,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  travelersStripSub: {
+    ...typography.caption,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  travelersStripRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  addTravelerChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: colors.primarySurface,
+    borderRadius: radius.full,
+  },
+  addTravelerChipText: {
+    ...typography.caption,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  stripChevron: {
+    width: 12,
+    height: 12,
+    tintColor: colors.textMuted,
   },
 
   // ── Section Shared ─────────────────────────────────────────────────────────
@@ -1004,5 +1295,86 @@ const styles = StyleSheet.create({
   cardPressed: {
     opacity: 0.92,
     transform: [{ scale: 0.99 }],
+  },
+
+  // ── Centered Loading & Error States ────────────────────────────────────────
+  centeredContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  loadingText: {
+    ...typography.body,
+    fontSize: 15,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  errorIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
+  errorIcon: {
+    width: 24,
+    height: 24,
+    tintColor: colors.error,
+  },
+  errorTitle: {
+    ...typography.sectionTitle,
+    fontSize: 20,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  errorSubtitle: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+    maxWidth: 300,
+  },
+  errorActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  backButton: {
+    backgroundColor: colors.backgroundAlt,
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+  backButtonText: {
+    ...typography.label,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  retryButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radius.button,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    ...shadows.card,
+  },
+  retryButtonText: {
+    ...typography.label,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textOnPrimary,
+  },
+  deleteGlassButton: {
+    backgroundColor: 'rgba(176, 74, 74, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+  },
+  deleteIconText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '700',
   },
 });

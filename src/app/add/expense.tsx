@@ -19,8 +19,9 @@
  *   - Returns to previous screen or trip expenses list upon save / cancel.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -38,10 +39,13 @@ import { colors, radius, shadows, spacing, typography } from '@/theme';
 import {
   addExpense,
   deleteExpense,
+  fetchExpenseById,
   getExpenseById,
   updateExpense,
 } from '@/services/expenseStore';
-import { getAllTrips, getTripById, getTripTravelers } from '@/services/mockData';
+import { getAllTrips, getTripById, getTripTravelers, Traveler } from '@/services/mockData';
+import { getCachedTrips } from '@/services/trip';
+import { listTripMembers, fetchUserTripRole } from '@/services/collaboration';
 import { Button } from '@/components/ui';
 import {
   CurrencyCode,
@@ -99,17 +103,48 @@ export default function AddExpenseScreen() {
 
   // 1. Resolve Trip Reference
   const allTrips = getAllTrips();
+  const cachedTrips = getCachedTrips() || [];
   const rawTripId = tripId || 'japan-adventure';
   const effectiveTripId =
-    allTrips.some((t) => t.id === rawTripId) ? rawTripId : 'japan-adventure';
-  const trip = getTripById(effectiveTripId) || allTrips[0];
-  const tripTravelers = getTripTravelers(effectiveTripId);
+    rawTripId && (cachedTrips.some((t) => t.id === rawTripId) || allTrips.some((t) => t.id === rawTripId))
+      ? rawTripId
+      : rawTripId || 'japan-adventure';
+  const trip =
+    cachedTrips.find((t) => t.id === effectiveTripId) ||
+    getTripById(effectiveTripId) ||
+    cachedTrips[0] ||
+    allTrips[0];
+  const [tripTravelers, setTripTravelers] = useState<Traveler[]>(() => getTripTravelers(effectiveTripId));
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadMembers() {
+      try {
+        const [members, role] = await Promise.all([
+          listTripMembers(effectiveTripId),
+          fetchUserTripRole(effectiveTripId),
+        ]);
+        if (!isMounted) return;
+        if (members && members.length > 0) {
+          setTripTravelers(members);
+        }
+        setUserRole(role);
+      } catch (err) {
+        console.warn('[AddExpense] Error loading members:', err);
+      }
+    }
+    loadMembers();
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
 
   // 2. Resolve Existing Item if Edit Mode
   const existingExpense = useMemo(() => {
     return expenseId ? getExpenseById(expenseId) : undefined;
   }, [expenseId]);
-  const isEditMode = Boolean(existingExpense);
+  const isEditMode = Boolean(expenseId);
 
   // 3. Form State
   const [selectedTripId, setSelectedTripId] = useState<string>(
@@ -144,6 +179,24 @@ export default function AddExpenseScreen() {
   const [notes, setNotes] = useState<string>(
     () => existingExpense?.notes || ''
   );
+
+  // Load existing expense if not in initial cache
+  React.useEffect(() => {
+    if (expenseId && !existingExpense) {
+      fetchExpenseById(expenseId).then((fetched) => {
+        if (fetched) {
+          setTitle(fetched.title);
+          setAmountStr(String(toMajorUnits(fetched.amount, fetched.currency)));
+          setCurrency(fetched.currency);
+          setCategory(fetched.category);
+          setDate(new Date(fetched.date));
+          if (fetched.paidBy) setPaidBy(fetched.paidBy);
+          if (fetched.notes) setNotes(fetched.notes);
+          setSelectedTripId(fetched.tripId);
+        }
+      });
+    }
+  }, [expenseId, existingExpense]);
 
   // 4. UI Flags & Errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -182,16 +235,30 @@ export default function AddExpenseScreen() {
     }
   };
 
-  const handleConfirmDelete = () => {
-    if (!existingExpense) return;
-    deleteExpense(existingExpense.id);
-    setShowDeleteConfirm(false);
-    router.replace(`/(tabs)/trips/${selectedTripId}/expenses` as any);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!existingExpense || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteExpense(existingExpense.id);
+      setShowDeleteConfirm(false);
+      router.replace(`/(tabs)/trips/${selectedTripId}/expenses` as any);
+    } catch (err: any) {
+      console.error('Failed to delete expense:', err);
+      setIsDeleting(false);
+      Alert.alert('Error', err?.message || 'Failed to delete expense. Please try again.');
+    }
   };
 
   // 6. Form Submission
   const handleSubmit = async () => {
     if (isSubmitting) return;
+
+    if (userRole === 'viewer') {
+      Alert.alert('Permission Denied', 'Viewers cannot create or edit expenses on this trip.');
+      return;
+    }
 
     const newErrors: Record<string, string> = {};
 
@@ -226,8 +293,8 @@ export default function AddExpenseScreen() {
       const minorUnits = toMinorUnits(amountStr, currency);
       const isoDate = toIsoDateOnly(date);
 
-      if (isEditMode && existingExpense) {
-        updateExpense(existingExpense.id, {
+      if (isEditMode && (existingExpense || expenseId)) {
+        await updateExpense(expenseId || existingExpense!.id, {
           title: title.trim(),
           amount: minorUnits,
           currency,
@@ -237,7 +304,7 @@ export default function AddExpenseScreen() {
           notes: notes.trim() ? notes.trim() : undefined,
         });
       } else {
-        addExpense({
+        await addExpense({
           tripId: selectedTripId,
           title: title.trim(),
           amount: minorUnits,

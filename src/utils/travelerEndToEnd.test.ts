@@ -63,7 +63,7 @@ function assert(condition: boolean, msg: string): void {
   }
 }
 
-export function runTravelerEndToEndTests(): void {
+export async function runTravelerEndToEndTests(): Promise<void> {
   console.log('================================================================');
   console.log('  VOYARO TRAVELER E2E SCENARIO: JAPAN ADVENTURE (PHASE 5)');
   console.log('================================================================\n');
@@ -77,7 +77,7 @@ export function runTravelerEndToEndTests(): void {
   console.log('Step 2: Open Itinerary timeline');
 
   // Baseline the trip state cleanly for the traveler scenario
-  clearItems(tripId);
+  await clearItems(tripId);
   let currentItems = getItems(tripId);
   assert(currentItems.length === 0, 'Itinerary should start clean for scenario');
 
@@ -90,7 +90,7 @@ export function runTravelerEndToEndTests(): void {
   // STEP 3: Add a flight
   // -------------------------------------------------------------------------
   console.log('\nStep 3: Add a flight');
-  const flight = addItem({
+  const flight = await addItem({
     tripId,
     type: 'flight',
     title: 'Flight to Tokyo (HND)',
@@ -119,7 +119,7 @@ export function runTravelerEndToEndTests(): void {
   // STEP 4: Add a hotel
   // -------------------------------------------------------------------------
   console.log('\nStep 4: Add a hotel');
-  const hotel = addItem({
+  const hotel = await addItem({
     tripId,
     type: 'hotel',
     title: 'Park Hyatt Tokyo',
@@ -145,7 +145,7 @@ export function runTravelerEndToEndTests(): void {
   // STEP 5: Add an activity
   // -------------------------------------------------------------------------
   console.log('\nStep 5: Add an activity');
-  const activity = addItem({
+  const activity = await addItem({
     tripId,
     type: 'activity',
     title: 'teamLab Planets Digital Art Museum',
@@ -168,7 +168,7 @@ export function runTravelerEndToEndTests(): void {
   // STEP 6: Add transportation
   // -------------------------------------------------------------------------
   console.log('\nStep 6: Add transportation');
-  const transport = addItem({
+  const transport = await addItem({
     tripId,
     type: 'transportation',
     title: 'Shinkansen Hikari Express',
@@ -217,7 +217,7 @@ export function runTravelerEndToEndTests(): void {
   assert((flightDetails!.metadata as FlightMetadata).gate === 'G98', 'Gate is G98');
 
   console.log('Step 9: Edit flight gate to Gate 112A');
-  const updatedFlight = updateItem(flight.id, {
+  const updatedFlight = await updateItem(flight.id, {
     metadata: {
       ...(flightDetails!.metadata as FlightMetadata),
       gate: 'Gate 112A',
@@ -234,7 +234,7 @@ export function runTravelerEndToEndTests(): void {
   // STEP 11 & 12: Edit flight departure time & Verify item moves
   // -------------------------------------------------------------------------
   console.log('\nStep 11: Edit flight departure time to 16:30 (after hotel 15:00)');
-  updateItem(flight.id, {
+  await updateItem(flight.id, {
     startDateTime: '2028-03-10T16:30:00.000Z',
     endDateTime: '2028-03-10T23:30:00.000Z',
   });
@@ -255,7 +255,7 @@ export function runTravelerEndToEndTests(): void {
   assert(Boolean(hotelDetails), 'Hotel details must exist');
 
   console.log('Step 14: Edit check-in time and notes');
-  updateItem(hotel.id, {
+  await updateItem(hotel.id, {
     notes: 'VIP guest. Early check-in approved for 1:00 PM.',
     metadata: {
       ...(hotelDetails!.metadata as HotelMetadata),
@@ -276,7 +276,7 @@ export function runTravelerEndToEndTests(): void {
   // -------------------------------------------------------------------------
   console.log('\nStep 16: Delete the activity (opens confirmation modal)');
   console.log('Step 17: Confirm deletion');
-  const wasDeleted = deleteItem(activity.id);
+  const wasDeleted = await deleteItem(activity.id);
   assert(wasDeleted === true, 'deleteItem must return true');
 
   console.log('Step 18: Verify activity is gone from store and timeline');
@@ -290,7 +290,7 @@ export function runTravelerEndToEndTests(): void {
   // STEP 19 & 20: Add another activity on a new date & Verify new day appears
   // -------------------------------------------------------------------------
   console.log('\nStep 19: Add another activity on a new date (March 15)');
-  const newActivity = addItem({
+  const newActivity = await addItem({
     tripId,
     type: 'activity',
     title: 'Fushimi Inari Sunset Shrine Hike',
@@ -367,7 +367,7 @@ export function runTravelerEndToEndTests(): void {
 
   // 3. Overnight flight test
   console.log('• Testing Overnight Flight representation...');
-  const overnightFlight = addItem({
+  const overnightFlight = await addItem({
     tripId,
     type: 'flight',
     title: 'Return Red-eye to San Francisco',
@@ -388,7 +388,7 @@ export function runTravelerEndToEndTests(): void {
 
   // 4. Same-time items test
   console.log('• Testing same-time items deterministic ordering...');
-  const sameTimeItemA = addItem({
+  const sameTimeItemA = await addItem({
     tripId,
     type: 'activity',
     title: 'Morning Yoga',
@@ -398,7 +398,7 @@ export function runTravelerEndToEndTests(): void {
       category: 'Wellness',
     },
   });
-  const sameTimeItemB = addItem({
+  const sameTimeItemB = await addItem({
     tripId,
     type: 'activity',
     title: 'Breakfast Buffet',

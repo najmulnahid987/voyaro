@@ -13,8 +13,10 @@
  *  - No backend, no maps, no external APIs.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   Platform,
   Pressable,
@@ -41,16 +43,25 @@ import {
   formatItineraryTime,
 } from '@/utils/itineraryDateUtils';
 import { Button, Card } from '@/components/ui';
+import { fetchUserTripRole } from '@/services/collaboration';
 
 export default function ItineraryItemDetailScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();
   const insets = useSafeAreaInsets();
 
-  // 1. Reactive item state from in-memory store
-  const { item, exists } = useItineraryItem(itemId);
+  // 1. Reactive item state from store
+  const { item, exists, loading } = useItineraryItem(itemId);
 
   // 2. Modals state for Delete
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    if (item?.tripId) {
+      fetchUserTripRole(item.tripId).then((r) => setUserRole(r));
+    }
+  }, [item?.tripId]);
 
   // ---------------------------------------------------------------------------
   // Navigation Handlers
@@ -75,13 +86,44 @@ export default function ItineraryItemDetailScreen() {
     setShowDeleteConfirm(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (!item || !itemId) return;
+  const handleConfirmDelete = async () => {
+    if (!item || !itemId || isDeleting) return;
     const targetTripId = item.tripId || 'japan-adventure';
-    deleteItem(itemId);
-    setShowDeleteConfirm(false);
-    router.replace(`/(tabs)/trips/${targetTripId}/itinerary` as any);
+    setIsDeleting(true);
+    try {
+      await deleteItem(itemId);
+      setShowDeleteConfirm(false);
+      router.replace(`/(tabs)/trips/${targetTripId}/itinerary` as any);
+    } catch (err: any) {
+      console.error('Failed to delete itinerary item:', err);
+      setIsDeleting(false);
+      Alert.alert('Error', err?.message || 'Failed to delete reservation. Please try again.');
+    }
   };
+
+  // ---------------------------------------------------------------------------
+  // Initial Loading State
+  // ---------------------------------------------------------------------------
+  if (loading && !item) {
+    return (
+      <View
+        style={[
+          styles.screen,
+          {
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={{ marginTop: spacing.md, color: colors.textSecondary, ...typography.body }}>
+          Loading reservation details...
+        </Text>
+      </View>
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // Empty / Not Found State
@@ -164,32 +206,36 @@ export default function ItineraryItemDetailScreen() {
         <Text style={styles.topBarTitle}>Reservation Details</Text>
 
         <View style={styles.topBarActions}>
-          <Pressable
-            onPress={handleEditPress}
-            style={({ pressed }) => [
-              styles.iconCircleButton,
-              pressed && styles.buttonPressed,
-            ]}
-            accessibilityLabel="Edit reservation"
-          >
-            <Text style={styles.editIconText}>✎</Text>
-          </Pressable>
+          {userRole !== 'viewer' && (
+            <>
+              <Pressable
+                onPress={handleEditPress}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityLabel="Edit reservation"
+              >
+                <Text style={styles.editIconText}>✎</Text>
+              </Pressable>
 
-          <Pressable
-            onPress={handleDeletePress}
-            style={({ pressed }) => [
-              styles.deleteCircleButton,
-              pressed && styles.buttonPressed,
-            ]}
-            accessibilityLabel="Delete reservation"
-          >
-            <Image
-              source={require('@/assets/images/icons/close.svg')}
-              style={styles.deleteIcon}
-              tintColor={colors.destructive}
-              contentFit="contain"
-            />
-          </Pressable>
+              <Pressable
+                onPress={handleDeletePress}
+                style={({ pressed }) => [
+                  styles.deleteCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityLabel="Delete reservation"
+              >
+                <Image
+                  source={require('@/assets/images/icons/close.svg')}
+                  style={styles.deleteIcon}
+                  tintColor={colors.destructive}
+                  contentFit="contain"
+                />
+              </Pressable>
+            </>
+          )}
         </View>
       </View>
 

@@ -56,13 +56,29 @@ const INTEREST_CATEGORIES: InterestCategory[] = [
   },
 ];
 
+import { useAuth } from '@/services/AuthContext';
+import { saveInterests } from '@/services/profile';
+
 /**
  * Route: /(auth)/onboarding/interests
  * Onboarding Step 2 of 4: "What do you care about most?"
  */
 export default function InterestsScreen() {
-  // Multi-selection state (defaults to Food and Culture per Stitch design)
-  const [selectedInterests, setSelectedInterests] = useState<string[]>(['food', 'culture']);
+  const { profile } = useAuth();
+  // Multi-selection state (loads from profile if present, else defaults to Food and Culture)
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(
+    profile?.interests && profile.interests.length > 0
+      ? profile.interests
+      : ['food', 'culture']
+  );
+  const [saving, setSaving] = useState(false);
+
+  // Sync with profile if updated
+  React.useEffect(() => {
+    if (profile?.interests && profile.interests.length > 0) {
+      setSelectedInterests(profile.interests);
+    }
+  }, [profile?.interests]);
 
   const toggleInterest = (id: string) => {
     setSelectedInterests((prev) =>
@@ -70,13 +86,24 @@ export default function InterestsScreen() {
     );
   };
 
-  const handleContinue = () => {
-    router.push('/(auth)/onboarding/preferences');
+  const handleContinue = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await saveInterests(selectedInterests);
+      router.push('/(auth)/onboarding/preferences');
+    } catch (err) {
+      console.warn('[Voyaro Onboarding] Failed to save interests:', err);
+      router.push('/(auth)/onboarding/preferences');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSkip = () => {
     router.push('/(auth)/onboarding/preferences');
   };
+
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -225,7 +252,9 @@ export default function InterestsScreen() {
       <View style={styles.bottomBar}>
         <Button
           variant="primary"
-          label="Continue"
+          label={saving ? 'Saving...' : 'Continue'}
+          loading={saving}
+          disabled={saving}
           rightIcon={
             <Image
               source={require('@/assets/images/onboarding/arrow-right.svg')}

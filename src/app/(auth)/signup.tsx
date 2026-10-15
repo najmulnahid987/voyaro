@@ -10,20 +10,21 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Divider, IconButton, Input } from '@/components/ui';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { signup, validateSignupCredentials } from '@/services/auth';
+import { signInWithGoogle, signup, validateSignupCredentials } from '@/services/auth';
 
 /**
  * Route: /(auth)/signup
- * Voyaro Signup Screen (Phase 3)
+ * Voyaro Signup Screen (Phase 7 — Step 10)
  *
  * Visual source of truth: Google Stitch Signup design.
  * Features:
  *  - Header with back navigation, Voyaro emblem, title, and subtitle
- *  - Social sign-up with Google & Apple (fake flow leading to onboarding)
+ *  - Real Google Sign-Up with Supabase OAuth flow
+ *  - Honest Apple Sign-Up unavailable state
  *  - Form fields: Name, Email, Password, Confirm Password
  *  - Inline field-level validation matching Phase 1 input design language
  *  - Successful signup sets authenticated = true, onboardingComplete = false,
@@ -31,6 +32,7 @@ import { signup, validateSignupCredentials } from '@/services/auth';
  *  - Navigation to Log In
  */
 export default function SignupScreen() {
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,6 +40,7 @@ export default function SignupScreen() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // Field validation errors
   const [errors, setErrors] = useState<{
@@ -59,28 +62,97 @@ export default function SignupScreen() {
   };
 
   // --- Handlers ---
-  const handleGoogleSignup = () => {
-    signup({ provider: 'google' });
-    router.replace('/(auth)/onboarding/travel-style');
+  const handleGoogleSignup = async () => {
+    if (googleLoading || loading) return;
+    setGoogleLoading(true);
+
+    try {
+      const result = await signInWithGoogle();
+      if (!result.success) {
+        if (result.error && !result.error.toLowerCase().includes('cancel')) {
+          Alert.alert('Google Sign-Up', result.error);
+        }
+        return;
+      }
+
+      if (result.session) {
+        if (redirect) {
+          router.replace(redirect as any);
+        } else if (result.onboardingComplete) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/onboarding/travel-style');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert(
+        'Google Sign-Up Error',
+        err.message || 'An unexpected error occurred during Google sign up.'
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   const handleAppleSignup = () => {
-    signup({ provider: 'apple' });
-    router.replace('/(auth)/onboarding/travel-style');
+    Alert.alert(
+      'Apple Sign-Up Unavailable',
+      'Sign up with Apple is currently not configured for this project. Please continue with Google or create an account with email and password.'
+    );
   };
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
+    if (loading || googleLoading) return;
     if (!validate()) {
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const result = await signup({
+        email: email.trim(),
+        name: name.trim(),
+        password,
+      });
+
+      if (!result.success) {
+        setErrors((prev) => ({
+          ...prev,
+          email: result.error || 'Failed to create account.',
+        }));
+        return;
+      }
+
+      if (result.emailConfirmationRequired) {
+        Alert.alert(
+          'Confirm Your Email',
+          'We sent a confirmation link to your email address. Please check your inbox and confirm your account before signing in.',
+          [
+            {
+              text: 'Go to Sign In',
+              onPress: () =>
+                router.replace({
+                  pathname: '/(auth)/login',
+                  params: redirect ? { redirect } : undefined,
+                }),
+            },
+          ]
+        );
+        return;
+      }
+
+      if (redirect) {
+        router.replace(redirect as any);
+      } else {
+        router.replace('/(auth)/onboarding/travel-style');
+      }
+    } catch (err: any) {
+      Alert.alert('Sign Up Error', err.message || 'An unexpected error occurred.');
+    } finally {
       setLoading(false);
-      signup({ email: email.trim(), name: name.trim(), password });
-      router.replace('/(auth)/onboarding/travel-style');
-    }, 450);
+    }
   };
+
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -146,7 +218,9 @@ export default function SignupScreen() {
             <View style={styles.socialSection}>
               <Button
                 variant="ghost"
-                label="Continue with Google"
+                label={googleLoading ? 'Signing up with Google...' : 'Continue with Google'}
+                loading={googleLoading}
+                disabled={loading || googleLoading}
                 leftIcon={
                   <Image
                     source={require('@/assets/images/google-icon.svg')}
@@ -163,6 +237,7 @@ export default function SignupScreen() {
               <Button
                 variant="ghost"
                 label="Continue with Apple"
+                disabled={loading || googleLoading}
                 leftIcon={
                   <Image
                     source={require('@/assets/images/apple-icon.svg')}
@@ -281,6 +356,7 @@ export default function SignupScreen() {
                 label="Create Account"
                 fullWidth
                 loading={loading}
+                disabled={loading || googleLoading}
                 onPress={handleSignup}
                 style={styles.signupButton}
               />

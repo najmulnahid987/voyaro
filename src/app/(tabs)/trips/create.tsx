@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,10 +10,22 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { createMockTrip, Trip } from '@/services/mockData';
+import { Trip } from '@/services/mockData';
+import { createTrip, updateTrip, fetchTripById } from '@/services/trip';
+import { CurrencyCode } from '@/types/expense';
 import { useShellInsets } from '@/components/navigation';
+
+function toIsoDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString().split('T')[0];
+    }
+  } catch {}
+  return new Date().toISOString().split('T')[0];
+}
 
 // ---------------------------------------------------------------------------
 // Trip Style Types & Data
@@ -77,6 +89,10 @@ const CURRENCIES = [
 export default function CreateTripScreen() {
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
+  // Route params for Edit mode
+  const { tripId } = useLocalSearchParams<{ tripId?: string }>();
+  const isEditing = Boolean(tripId);
+
   // Form State
   const [tripName, setTripName] = useState('');
   const [destination, setDestination] = useState('');
@@ -89,15 +105,53 @@ export default function CreateTripScreen() {
   const [budget, setBudget] = useState('');
   const [isCurrencyDropdownOpen, setIsCurrencyDropdownOpen] = useState(false);
 
-  // Validation State
+  // Validation & Submission State
   const [errors, setErrors] = useState<{
     tripName?: string;
     destination?: string;
+    dates?: string;
   }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Quick Date Picker State
   const [activeDateModal, setActiveDateModal] = useState<'start' | 'end' | null>(null);
+
+  // Role state for editing permissions
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  // Load existing trip data if editing
+  useEffect(() => {
+    let isMounted = true;
+    if (tripId) {
+      fetchTripById(tripId)
+        .then((existing) => {
+          if (!isMounted) return;
+          if (existing) {
+            const role = existing.userRole || (existing.isOwner ? 'owner' : null);
+            setUserRole(role);
+            if (existing.isOwner === false || (existing.userRole && existing.userRole !== 'owner')) {
+              setSubmitError('Only the trip owner can edit trip details and settings.');
+            }
+            setTripName(existing.title);
+            setDestination(existing.destination);
+            setStops(existing.cities || []);
+            setStartDate(existing.startDate);
+            setEndDate(existing.endDate);
+            setTravelers(existing.travelerCount || 1);
+            if (existing.spending?.budget) {
+              setBudget(existing.spending.budget.toString());
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn('[Voyaro] Failed to load trip for editing:', err);
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId]);
 
   // Stepper handlers
   const handleDecrementTravelers = () => {
@@ -122,8 +176,9 @@ export default function CreateTripScreen() {
   };
 
   // Validation & Submission
-  const handleCreateTrip = () => {
-    const newErrors: { tripName?: string; destination?: string } = {};
+  const handleCreateTrip = async () => {
+    if (isSubmitting) return;
+    const newErrors: { tripName?: string; destination?: string; dates?: string } = {};
 
     if (!tripName.trim()) {
       newErrors.tripName = 'Trip name is required.';
@@ -132,41 +187,64 @@ export default function CreateTripScreen() {
       newErrors.destination = 'Destination is required.';
     }
 
+    const startDateIso = toIsoDate(startDate);
+    const endDateIso = toIsoDate(endDate);
+
+    if (endDateIso < startDateIso) {
+      newErrors.dates = 'End date must be on or after start date.';
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
     setErrors({});
+    setSubmitError(null);
+
+    if (isEditing && tripId && userRole && userRole !== 'owner') {
+      setSubmitError('Permission denied: Only the trip owner can modify trip details.');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const parsedBudget = parseFloat(budget.replace(/[^0-9.]/g, '')) || 2000;
+    const parsedBudget = parseFloat(budget.replace(/[^0-9.]/g, '')) || 0;
     const allDestinations = stops.length > 0 ? stops : [destination.trim()];
 
-    const createdTrip = createMockTrip({
-      title: tripName.trim(),
-      destination: allDestinations.join(' · '),
-      cities: allDestinations,
-      dates: `${startDate} - ${endDate}`,
-      startDate: '2028-10-12',
-      endDate: '2028-10-26',
-      status: 'upcoming',
-      travelerCount: travelers,
-      itineraryCount: 0,
-      spending: {
-        spent: 0,
-        budget: parsedBudget,
-        currency: selectedCurrency.symbol,
-        percentUsed: 0,
-        spentFormatted: '0',
-        budgetFormatted: parsedBudget.toLocaleString(),
-        isOverBudget: false,
-      },
-    });
-
-    setIsSubmitting(false);
-    // Navigate directly to the newly created trip overview
-    router.replace(`/(tabs)/trips/${createdTrip.id}`);
+    try {
+      if (isEditing && tripId) {
+        const updated = await updateTrip(tripId, {
+          title: tripName.trim(),
+          destination: allDestinations.join(' · '),
+          cities: allDestinations,
+          startDate: startDateIso,
+          endDate: endDateIso,
+          travelerCount: travelers,
+          budgetAmount: parsedBudget,
+          budgetCurrency: selectedCurrency.code as CurrencyCode,
+        });
+        setIsSubmitting(false);
+        router.replace(`/(tabs)/trips/${updated.id}`);
+      } else {
+        const created = await createTrip({
+          title: tripName.trim(),
+          destination: allDestinations.join(' · '),
+          cities: allDestinations,
+          startDate: startDateIso,
+          endDate: endDateIso,
+          travelerCount: travelers,
+          status: 'upcoming',
+          budgetAmount: parsedBudget,
+          budgetCurrency: selectedCurrency.code as CurrencyCode,
+        });
+        setIsSubmitting(false);
+        router.replace(`/(tabs)/trips/${created.id}`);
+      }
+    } catch (err: any) {
+      setSubmitError(err.message || 'Failed to save trip. Please try again.');
+      setIsSubmitting(false);
+    }
   };
 
   const handleCancel = () => {
@@ -191,11 +269,28 @@ export default function CreateTripScreen() {
           <View style={styles.container}>
             {/* ── 1. Hero / Destination Preview Header ───────────────────── */}
             <View style={styles.heroSection}>
-              <Text style={styles.heroTitle}>Create a new trip</Text>
+              <Text style={styles.heroTitle}>
+                {isEditing ? 'Edit Trip' : 'Create a new trip'}
+              </Text>
               <Text style={styles.heroSubtitle}>
-                Where will your next story begin?
+                {isEditing
+                  ? 'Update your trip details and itinerary settings.'
+                  : 'Where will your next story begin?'}
               </Text>
             </View>
+
+            {/* Error Banner */}
+            {submitError && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{submitError}</Text>
+              </View>
+            )}
+
+            {errors.dates && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorBannerText}>{errors.dates}</Text>
+              </View>
+            )}
 
             {/* ── 2. General Info Section ─────────────────────────────────── */}
             <View style={styles.section}>
@@ -519,23 +614,44 @@ export default function CreateTripScreen() {
 
             {/* ── 5. Actions Area ─────────────────────────────────────────── */}
             <View style={styles.actionsSection}>
-              <Pressable
-                onPress={handleCreateTrip}
-                disabled={isSubmitting}
-                style={({ pressed }) => [
-                  styles.createTripButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Create Trip"
-              >
-                <Text style={styles.createTripButtonText}>Create Trip</Text>
-                <Image
-                  source={require('@/assets/images/onboarding/arrow-right.svg')}
-                  style={styles.createTripButtonIcon}
-                  contentFit="contain"
-                />
-              </Pressable>
+              {(() => {
+                const isOwnerBlocked = isEditing && userRole !== null && userRole !== 'owner';
+                return (
+                  <Pressable
+                    onPress={handleCreateTrip}
+                    disabled={isSubmitting || isOwnerBlocked}
+                    style={({ pressed }) => [
+                      styles.createTripButton,
+                      isOwnerBlocked && styles.createTripButtonDisabled,
+                      pressed && !isOwnerBlocked && styles.buttonPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={isEditing ? 'Save Changes' : 'Create Trip'}
+                  >
+                    <Text style={[
+                      styles.createTripButtonText,
+                      isOwnerBlocked && styles.createTripButtonTextDisabled,
+                    ]}>
+                      {isSubmitting
+                        ? isEditing
+                          ? 'Saving...'
+                          : 'Creating...'
+                        : isOwnerBlocked
+                        ? 'Owner Only'
+                        : isEditing
+                        ? 'Save Changes'
+                        : 'Create Trip'}
+                    </Text>
+                    {!isOwnerBlocked && (
+                      <Image
+                        source={require('@/assets/images/onboarding/arrow-right.svg')}
+                        style={styles.createTripButtonIcon}
+                        contentFit="contain"
+                      />
+                    )}
+                  </Pressable>
+                );
+              })()}
 
               <Pressable
                 onPress={handleCancel}
@@ -1068,11 +1184,18 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadows.card,
   },
+  createTripButtonDisabled: {
+    backgroundColor: colors.border,
+    opacity: 0.65,
+  },
   createTripButtonText: {
     ...typography.label,
     fontSize: 16,
     fontWeight: '600',
     color: colors.textOnPrimary,
+  },
+  createTripButtonTextDisabled: {
+    color: colors.textSecondary,
   },
   createTripButtonIcon: {
     width: 18,
@@ -1156,5 +1279,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    borderRadius: radius.button,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.error,
+    marginBottom: spacing.md,
+  },
+  errorBannerText: {
+    ...typography.caption,
+    color: colors.error,
+    fontWeight: '500',
+    textAlign: 'center',
   },
 });

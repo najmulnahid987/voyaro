@@ -65,6 +65,10 @@ export interface TripSubNavHeaderProps {
    */
   title?: string;
   /**
+   * Whether the user has permission to add reservations or expenses. Defaults to true.
+   */
+  canAdd?: boolean;
+  /**
    * Optional custom back action
    */
   onBack?: () => void;
@@ -82,6 +86,7 @@ export function TripSubNavHeader({
   tripId,
   activeTab: propActiveTab,
   title: propTitle,
+  canAdd = true,
   onBack,
   onAdd,
   onTabPress,
@@ -118,6 +123,9 @@ export function TripSubNavHeader({
   };
 
   const handleAddPress = () => {
+    if (!canAdd) {
+      return;
+    }
     if (onAdd) {
       onAdd();
       return;
@@ -165,23 +173,25 @@ export function TripSubNavHeader({
           <Text style={styles.backArrowText}>←</Text>
         </Pressable>
 
-        <Pressable
-          onPress={handleAddPress}
-          style={({ pressed }) => [
-            styles.addButton,
-            pressed && styles.buttonPressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Add trip reservation or item"
-          hitSlop={8}
-        >
-          <Image
-            source={require('@/assets/images/icons/plus.svg')}
-            style={styles.plusIcon}
-            tintColor={colors.textOnPrimary}
-            contentFit="contain"
-          />
-        </Pressable>
+        {canAdd && (
+          <Pressable
+            onPress={handleAddPress}
+            style={({ pressed }) => [
+              styles.addButton,
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Add trip reservation or item"
+            hitSlop={8}
+          >
+            <Image
+              source={require('@/assets/images/icons/plus.svg')}
+              style={styles.plusIcon}
+              tintColor={colors.textOnPrimary}
+              contentFit="contain"
+            />
+          </Pressable>
+        )}
       </View>
 
       {/* ── 2. Trip Editorial Title ─────────────────────────────────────── */}

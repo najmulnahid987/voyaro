@@ -32,7 +32,7 @@ function assert(condition: boolean, message: string) {
   console.log(`✓ PASS: ${message}`);
 }
 
-export function runExpenseDashboardWorkflowTests() {
+export async function runExpenseDashboardWorkflowTests() {
   console.log('\n--- Running Expense Dashboard & List Test Suite (Step 4) ---\n');
 
   // Reset to initial seed data
@@ -114,7 +114,7 @@ export function runExpenseDashboardWorkflowTests() {
   assert(thailandSummary.isOverBudget === false, 'isOverBudget is false when budget missing');
 
   // Zero budget test
-  setTripBudget('thailand-escape', 0.01, 'USD'); // set temporary, then clear
+  await setTripBudget('thailand-escape', 0.01, 'USD'); // set temporary, then clear
   const zeroBudgetTest = getTripExpenseSummary('thailand-escape');
   assert(zeroBudgetTest.percentUsed !== undefined, 'Percent calculated safely');
 
@@ -155,7 +155,7 @@ export function runExpenseDashboardWorkflowTests() {
   // -------------------------------------------------------------------------
   console.log('\n7. Testing multi-currency separate totals...');
   // Add a JPY expense to Japan Adventure to test multi-currency display
-  const addedJPY = addExpense({
+  const addedJPY = await addExpense({
     tripId: 'japan-adventure',
     title: 'Convenience Store Snack',
     amount: 1500, // ¥1,500
@@ -183,7 +183,7 @@ export function runExpenseDashboardWorkflowTests() {
   );
 
   // Clean up added JPY expense
-  deleteExpense(addedJPY.id);
+  await deleteExpense(addedJPY.id);
   resetExpenseSeedData();
 
   console.log('\n✓ ALL 18 EXPENSE DASHBOARD WORKFLOW CHECKS PASSED SUCCESSFULLY!\n');

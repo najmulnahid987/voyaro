@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,28 +13,72 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { getAllTrips, Trip } from '@/services/mockData';
+import { Trip } from '@/services/mockData';
+import { listTrips, subscribeToTrips, getCachedTrips } from '@/services/trip';
 import { useShellInsets } from '@/components/navigation';
 
 type FilterType = 'all' | 'ongoing' | 'upcoming' | 'past';
 
 /**
- * Route: /(tabs)/trips — My Trips Screen (Phase 4)
+ * Route: /(tabs)/trips — My Trips Screen (Phase 7 — Step 7)
  *
- * Visual Source of Truth: Google Stitch My Trips design (trips.png & trips.html)
- * Features:
- *   - Header with "My Trips", subtitle, and "+ Create Trip" CTA
+ * Real Supabase Trip Persistence:
+ *   - Lists trips owned by the authenticated user
  *   - Filter bar: Ongoing, Upcoming, Past
- *   - Structured Trip Cards (cover banner, status badge, date, traveler count, itinerary count, budget summary)
+ *   - Loading indicator & Pull-to-refresh
+ *   - Error handling with explicit Retry CTA (never falls back to fake trips)
+ *   - Structured Trip Cards (cover banner, status badge, date, travelers, budget)
  *   - Empty state handling with CTA
  */
 export default function TripsScreen() {
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
-  const allTrips = getAllTrips();
+  const [trips, setTrips] = useState<Trip[]>(getCachedTrips() || []);
+  const [loading, setLoading] = useState<boolean>(!getCachedTrips());
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isMountedRef = React.useRef(true);
+
+  const loadTrips = async (isPullToRefresh = false) => {
+    if (isPullToRefresh) {
+      setRefreshing(true);
+    } else if (!getCachedTrips()) {
+      setLoading(true);
+    }
+    setError(null);
+
+    try {
+      const data = await listTrips();
+      if (isMountedRef.current) {
+        setTrips(data);
+      }
+    } catch (err: any) {
+      if (isMountedRef.current) {
+        setError(err.message || 'Failed to load trips. Please try again.');
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    const unsubscribe = subscribeToTrips((updated) => {
+      if (isMountedRef.current) {
+        setTrips(updated);
+      }
+    });
+    loadTrips();
+    return () => {
+      isMountedRef.current = false;
+      unsubscribe();
+    };
+  }, []);
 
   const handleFilterPress = (filter: FilterType) => {
-    // Tapping the active filter toggles back to 'all' for effortless browsing
     if (activeFilter === filter) {
       setActiveFilter('all');
     } else {
@@ -40,7 +86,7 @@ export default function TripsScreen() {
     }
   };
 
-  const filteredTrips = allTrips.filter((trip) => {
+  const filteredTrips = trips.filter((trip) => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'ongoing') return trip.status === 'ongoing' || trip.status === 'current';
     if (activeFilter === 'upcoming') return trip.status === 'upcoming';
@@ -65,6 +111,13 @@ export default function TripsScreen() {
           { paddingTop: contentPaddingTop, paddingBottom: contentPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadTrips(true)}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.container}>
           {/* ── 1. Header Section ─────────────────────────────────────────── */}
@@ -101,6 +154,7 @@ export default function TripsScreen() {
               contentContainerStyle={styles.filterScrollContent}
             >
               {[
+                { id: 'all' as FilterType, label: 'All Trips' },
                 { id: 'ongoing' as FilterType, label: 'Ongoing' },
                 { id: 'upcoming' as FilterType, label: 'Upcoming' },
                 { id: 'past' as FilterType, label: 'Past' },
@@ -135,8 +189,39 @@ export default function TripsScreen() {
             </ScrollView>
           </View>
 
-          {/* ── 3. Trip Cards List ────────────────────────────────────────── */}
-          {filteredTrips.length > 0 ? (
+          {/* ── 3. Trips List / Loading / Error / Empty States ─────────────── */}
+          {loading && trips.length === 0 ? (
+            /* Loading State */
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading your trips...</Text>
+            </View>
+          ) : error && trips.length === 0 ? (
+            /* Error State with Retry */
+            <View style={styles.errorContainer}>
+              <View style={styles.errorIconCircle}>
+                <Image
+                  source={require('@/assets/images/icons/close.svg')}
+                  style={styles.errorIcon}
+                  contentFit="contain"
+                />
+              </View>
+              <Text style={styles.errorTitle}>Unable to load trips</Text>
+              <Text style={styles.errorSubtitle}>{error}</Text>
+              <Pressable
+                onPress={() => loadTrips(false)}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading trips"
+              >
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </Pressable>
+            </View>
+          ) : filteredTrips.length > 0 ? (
+            /* Populated Trips List */
             <View style={styles.tripsList}>
               {filteredTrips.map((trip: Trip) => {
                 const isOngoing = trip.status === 'ongoing' || trip.status === 'current';
@@ -165,28 +250,51 @@ export default function TripsScreen() {
                           : styles.bannerUpcoming,
                       ]}
                     >
-                      {/* Status Badge (Top Right) */}
-                      {trip.statusBadgeLabel && (
-                        <View
-                          style={[
-                            styles.statusBadge,
-                            isOngoing
-                              ? styles.statusBadgeOngoing
-                              : styles.statusBadgePast,
-                          ]}
-                        >
-                          <Text
+                      {/* Status & Role Badges (Top Right) */}
+                      <View style={styles.bannerBadgesContainer}>
+                        {trip.userRole && trip.userRole !== 'owner' && (
+                          <View
                             style={[
-                              styles.statusBadgeText,
-                              isOngoing
-                                ? styles.statusBadgeTextOngoing
-                                : styles.statusBadgeTextPast,
+                              styles.roleBadge,
+                              trip.userRole === 'editor'
+                                ? styles.roleBadgeEditor
+                                : styles.roleBadgeViewer,
                             ]}
                           >
-                            {trip.statusBadgeLabel}
-                          </Text>
-                        </View>
-                      )}
+                            <Text
+                              style={[
+                                styles.roleBadgeText,
+                                trip.userRole === 'editor'
+                                  ? styles.roleBadgeTextEditor
+                                  : styles.roleBadgeTextViewer,
+                              ]}
+                            >
+                              {trip.userRole.toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                        {trip.statusBadgeLabel && (
+                          <View
+                            style={[
+                              styles.statusBadge,
+                              isOngoing
+                                ? styles.statusBadgeOngoing
+                                : styles.statusBadgePast,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.statusBadgeText,
+                                isOngoing
+                                  ? styles.statusBadgeTextOngoing
+                                  : styles.statusBadgeTextPast,
+                              ]}
+                            >
+                              {trip.statusBadgeLabel}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
 
                       {/* Title & Dates */}
                       <View style={styles.bannerInfo}>
@@ -449,10 +557,42 @@ const styles = StyleSheet.create({
   bannerPast: {
     backgroundColor: '#e8e8e8',
   },
-  statusBadge: {
+  bannerBadgesContainer: {
     position: 'absolute',
     top: 16,
     right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  roleBadgeEditor: {
+    backgroundColor: 'rgba(44, 95, 94, 0.12)',
+    borderColor: 'rgba(44, 95, 94, 0.25)',
+  },
+  roleBadgeViewer: {
+    backgroundColor: 'rgba(100, 116, 139, 0.12)',
+    borderColor: 'rgba(100, 116, 139, 0.25)',
+  },
+  roleBadgeText: {
+    ...typography.label,
+    fontSize: 10,
+    lineHeight: 14,
+    letterSpacing: 0.6,
+    fontWeight: '700',
+  },
+  roleBadgeTextEditor: {
+    color: colors.primary,
+  },
+  roleBadgeTextViewer: {
+    color: colors.textSecondary,
+  },
+  statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: radius.full,
@@ -609,6 +749,67 @@ const styles = StyleSheet.create({
   emptyCtaText: {
     ...typography.label,
     fontSize: 15,
+    fontWeight: '600',
+    color: colors.textOnPrimary,
+  },
+
+  // ── Loading & Error States ────────────────────────────────────────────────
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['4xl'],
+    gap: spacing.md,
+  },
+  loadingText: {
+    ...typography.body,
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['3xl'],
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  errorIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  errorIcon: {
+    width: 24,
+    height: 24,
+    tintColor: colors.error,
+  },
+  errorTitle: {
+    ...typography.sectionTitle,
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  errorSubtitle: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  retryButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: radius.button,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    ...shadows.card,
+  },
+  retryButtonText: {
+    ...typography.label,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
   },

@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, usePathname } from 'expo-router';
 import { colors } from '@/theme';
 import { TripSubNavHeader, TripSubNavTabKey } from '@/components/trips';
 import { useShellInsets } from '@/components/navigation';
+import { fetchTripById, getCachedTrips } from '@/services/trip';
+import { Trip } from '@/services/mockData';
 
 /**
  * Trip Detail Persistent Layout — /(tabs)/trips/[tripId]
@@ -17,6 +19,24 @@ export default function TripDetailLayout() {
   const effectiveTripId = tripId || 'japan-adventure';
   const pathname = usePathname();
   const { contentPaddingTop } = useShellInsets();
+
+  const [trip, setTrip] = useState<Trip | null>(() => {
+    return getCachedTrips()?.find((t) => t.id === effectiveTripId) || null;
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    if (effectiveTripId) {
+      fetchTripById(effectiveTripId).then((t) => {
+        if (isMounted && t) {
+          setTrip(t);
+        }
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
 
   // Resolve active tab from current route pathname
   const activeTab: TripSubNavTabKey = useMemo(() => {
@@ -32,6 +52,8 @@ export default function TripDetailLayout() {
     !pathname.includes('/settings') &&
     !pathname.includes('/travelers');
 
+  const canAdd = trip?.userRole !== 'viewer';
+
   return (
     <View style={styles.container}>
       {isSubTabRoute && (
@@ -39,6 +61,8 @@ export default function TripDetailLayout() {
           <TripSubNavHeader
             tripId={effectiveTripId}
             activeTab={activeTab}
+            title={trip?.title}
+            canAdd={canAdd}
           />
         </View>
       )}

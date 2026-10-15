@@ -1,7 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,7 +12,8 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { getTripById } from '@/services/mockData';
+import { Trip, getTripById as getDevMockTripById } from '@/services/mockData';
+import { fetchTripById, getCachedTrips } from '@/services/trip';
 import { useItinerary } from '@/services/itineraryStore';
 import {
   formatItineraryTime,
@@ -29,39 +32,76 @@ import { ItineraryItemCard } from '@/components/itinerary';
 /**
  * Route: /(tabs)/trips/[tripId]/itinerary
  *
- * Itinerary Timeline Screen — Voyaro Phase 5
+ * Itinerary Timeline Screen — Voyaro Phase 7 — Step 8
  *
- * Visual Source of Truth: Google Stitch itinerary.png & itinerary.html
- * Features:
+ * Supabase Persistent Itinerary Timeline:
  *   - Trip title and sub-navigation tabs (Overview, Itinerary, Map, Expenses, Documents)
  *   - Continuous vertical timeline with day header badges (Date, Month, Weekday)
  *   - Chronological item cards with type badges, formatted times, titles, and metadata
- *   - Reactive state integration via `useItinerary(tripId)`
+ *   - Live reactive Supabase state integration via `useItinerary(tripId)`
+ *   - Loading indicator, pull-to-refresh, error recovery, and empty state
  *   - Direct navigation to `/itinerary/[itemId]` on card press
  *   - Direct navigation to `/add` for adding new reservations
- *   - Responsive safe-area handling with `useShellInsets()`
  */
 
 export default function TripItineraryScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
   const effectiveTripId = tripId || 'japan-adventure';
-  const trip = getTripById(effectiveTripId) || getTripById('japan-adventure')!;
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
-  // 1. Reactive Itinerary State
-  const { items } = useItinerary(effectiveTripId);
+  const [trip, setTrip] = useState<Trip | null>(() => {
+    return getCachedTrips()?.find((t) => t.id === effectiveTripId) || null;
+  });
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTrip() {
+      try {
+        const liveTrip = await fetchTripById(effectiveTripId);
+        if (!isMounted) return;
+        if (liveTrip) {
+          setTrip(liveTrip);
+        } else if (__DEV__ && (effectiveTripId === 'japan-adventure' || effectiveTripId === 'demo-trip')) {
+          setTrip(getDevMockTripById(effectiveTripId) || null);
+        }
+      } catch (e) {
+        if (!isMounted) return;
+        if (__DEV__ && (effectiveTripId === 'japan-adventure' || effectiveTripId === 'demo-trip')) {
+          setTrip(getDevMockTripById(effectiveTripId) || null);
+        }
+      }
+    }
+    loadTrip();
+    return () => {
+      isMounted = false;
+    };
+  }, [effectiveTripId]);
+
+  // 1. Reactive Supabase Itinerary State
+  const { items, loading, error, refresh } = useItinerary(effectiveTripId);
+
+  const handleRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 2. Group items chronologically by local calendar day
   const dayGroups = useMemo(() => {
-    return groupItemsByDay(items, trip.startDate);
-  }, [items, trip.startDate]);
+    return groupItemsByDay(items, trip?.startDate);
+  }, [items, trip?.startDate]);
 
   // 3. Navigation handlers
   const handleBackPress = () => {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.push(`/(tabs)/trips/${trip.id}`);
+      router.push(`/(tabs)/trips/${trip?.id || effectiveTripId}`);
     }
   };
 
@@ -153,10 +193,43 @@ export default function TripItineraryScreen() {
           { paddingTop: spacing.xs, paddingBottom: contentPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+          />
+        }
       >
         <View style={styles.container}>
           {/* ── 1. Timeline Content Area ─────────────────────────────────── */}
-          {dayGroups.length === 0 ? (
+          {loading && items.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading itinerary timeline...</Text>
+            </View>
+          ) : error && items.length === 0 ? (
+            <View style={styles.errorContainer}>
+              <View style={styles.errorIconCircle}>
+                <Image
+                  source={require('@/assets/images/icons/close.svg')}
+                  style={styles.errorIcon}
+                  contentFit="contain"
+                />
+              </View>
+              <Text style={styles.errorTitle}>Unable to load itinerary</Text>
+              <Text style={styles.errorSubtitle}>{error}</Text>
+              <Pressable
+                onPress={refresh}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.buttonPressed,
+                ]}
+              >
+                <Text style={styles.retryButtonText}>Try Again</Text>
+              </Pressable>
+            </View>
+          ) : dayGroups.length === 0 ? (
             <View style={styles.emptyStateContainer}>
               <View style={styles.emptyStateIconCircle}>
                 <Image
@@ -168,18 +241,21 @@ export default function TripItineraryScreen() {
               </View>
               <Text style={styles.emptyStateTitle}>No Itinerary Items Yet</Text>
               <Text style={styles.emptyStateSubtitle}>
-                Add your flights, hotels, activities, or ground transportation
-                to see your travel timeline here.
+                {trip?.userRole === 'viewer'
+                  ? 'No itinerary items have been scheduled for this trip yet.'
+                  : 'Add your flights, hotels, activities, or ground transportation to see your travel timeline here.'}
               </Text>
-              <Pressable
-                onPress={handleAddPress}
-                style={({ pressed }) => [
-                  styles.emptyStateButton,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.emptyStateButtonText}>+ Add Reservation</Text>
-              </Pressable>
+              {trip?.userRole !== 'viewer' && (
+                <Pressable
+                  onPress={handleAddPress}
+                  style={({ pressed }) => [
+                    styles.emptyStateButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                >
+                  <Text style={styles.emptyStateButtonText}>+ Add Reservation</Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <View style={styles.timelineSection}>
@@ -584,6 +660,67 @@ const styles = StyleSheet.create({
   },
   emptyStateButtonText: {
     fontFamily: typography.label.fontFamily,
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textOnPrimary,
+  },
+
+  // ── Loading & Error States ────────────────────────────────────────────────
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['4xl'],
+    gap: spacing.md,
+  },
+  loadingText: {
+    ...typography.body,
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['3xl'],
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  errorIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(176, 74, 74, 0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  errorIcon: {
+    width: 24,
+    height: 24,
+    tintColor: colors.error,
+  },
+  errorTitle: {
+    ...typography.sectionTitle,
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  errorSubtitle: {
+    ...typography.body,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  retryButton: {
+    marginTop: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: radius.button,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    ...shadows.card,
+  },
+  retryButtonText: {
+    ...typography.label,
     fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,

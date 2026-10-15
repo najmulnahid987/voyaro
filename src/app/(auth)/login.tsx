@@ -10,69 +10,124 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Divider, IconButton, Input } from '@/components/ui';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { DEMO_CREDENTIALS, login } from '@/services/auth';
+import { login, resetPassword, signInWithGoogle } from '@/services/auth';
 
 /**
  * Route: /(auth)/login
- * Voyaro Login Screen (Phase 3)
+ * Voyaro Login Screen (Phase 7 — Step 10)
  *
- * Visual source of truth: Google Stitch Login design.
- * Features:
+ * Real Supabase Authentication:
  *  - Header with back navigation, Voyaro emblem, title, and subtitle
- *  - Google & Apple one-tap social sign-in (fake auth)
- *  - Email & Password input fields with show/hide password toggle
- *  - Inline error handling matching the design language
- *  - Demo credential support (demo@voyaro.app / voyaro123)
- *  - Forgot password interaction
+ *  - Real Google Sign-In with Supabase Auth OAuth flow
+ *  - Honest Apple Sign-In unavailable state
+ *  - Email & Password input fields with real Supabase authentication
+ *  - Real password reset via Supabase resetPasswordForEmail
+ *  - Error handling directly from Supabase Auth responses
  *  - Navigation to Sign Up
  */
 export default function LoginScreen() {
+  const { redirect } = useLocalSearchParams<{ redirect?: string }>();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // --- Handlers ---
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
+    if (googleLoading || loading) return;
     setErrorMessage(null);
-    login({ provider: 'google' });
-    router.replace('/(tabs)');
+    setGoogleLoading(true);
+
+    try {
+      const result = await signInWithGoogle();
+      if (!result.success) {
+        if (result.error && !result.error.toLowerCase().includes('cancel')) {
+          setErrorMessage(result.error);
+          Alert.alert('Google Sign-In', result.error);
+        }
+        return;
+      }
+
+      if (result.session) {
+        if (redirect) {
+          router.replace(redirect as any);
+        } else if (result.onboardingComplete) {
+          router.replace('/(tabs)');
+        } else {
+          router.replace('/(auth)/onboarding/travel-style');
+        }
+      }
+    } catch (err: any) {
+      const msg = err.message || 'An unexpected error occurred during Google sign in.';
+      setErrorMessage(msg);
+      Alert.alert('Google Sign-In Error', msg);
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   const handleAppleSignIn = () => {
-    setErrorMessage(null);
-    login({ provider: 'apple' });
-    router.replace('/(tabs)');
+    Alert.alert(
+      'Apple Sign-In Unavailable',
+      'Sign in with Apple is currently not configured for this project. Please continue with Google or use your email and password.'
+    );
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (loading || googleLoading) return;
     setErrorMessage(null);
+    setLoading(true);
 
-    // Validate and authenticate via centralized auth service
-    const result = login(email, password);
-    if (!result.success) {
-      setErrorMessage(result.error || 'Invalid credentials');
+    try {
+      const result = await login(email, password);
+      if (!result.success) {
+        setErrorMessage(result.error || 'Invalid credentials');
+        return;
+      }
+
+      if (redirect) {
+        router.replace(redirect as any);
+      } else if (result.onboardingComplete) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/(auth)/onboarding/travel-style');
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An unexpected error occurred during sign in.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setErrorMessage(null);
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setErrorMessage('Please enter your email address to receive a password reset link.');
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      router.replace('/(tabs)');
-    }, 450);
+    const result = await resetPassword(trimmed);
+    setLoading(false);
+
+    if (result.success) {
+      Alert.alert(
+        'Password Reset Sent',
+        `A password reset link has been sent to ${trimmed}. Please check your email inbox.`
+      );
+    } else {
+      setErrorMessage(result.error || 'Failed to send password reset email.');
+    }
   };
 
-  const handleForgotPassword = () => {
-    Alert.alert(
-      'Reset Password',
-      'In development mode. Enter demo@voyaro.app / voyaro123 to log in.'
-    );
-  };
 
   const handleBack = () => {
     if (router.canGoBack()) {
@@ -134,7 +189,9 @@ export default function LoginScreen() {
             <View style={styles.socialSection}>
               <Button
                 variant="ghost"
-                label="Continue with Google"
+                label={googleLoading ? 'Signing in with Google...' : 'Continue with Google'}
+                loading={googleLoading}
+                disabled={loading || googleLoading}
                 leftIcon={
                   <Image
                     source={require('@/assets/images/google-icon.svg')}
@@ -151,6 +208,7 @@ export default function LoginScreen() {
               <Button
                 variant="ghost"
                 label="Continue with Apple"
+                disabled={loading || googleLoading}
                 leftIcon={
                   <Image
                     source={require('@/assets/images/apple-icon.svg')}
@@ -180,7 +238,7 @@ export default function LoginScreen() {
               {/* Email */}
               <Input
                 label="Email"
-                placeholder="demo@voyaro.app"
+                placeholder="traveler@example.com"
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -189,7 +247,6 @@ export default function LoginScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
-                error={errorMessage ? undefined : undefined}
               />
 
               {/* Password */}
@@ -236,29 +293,17 @@ export default function LoginScreen() {
                 label="Log In"
                 fullWidth
                 loading={loading}
+                disabled={loading || googleLoading}
                 onPress={handleLogin}
                 style={styles.loginButton}
               />
-
-              {/* Development Quick-Fill Demo Helper */}
-              <Pressable
-                onPress={() => {
-                  setEmail(DEMO_CREDENTIALS.email);
-                  setPassword(DEMO_CREDENTIALS.password);
-                  setErrorMessage(null);
-                }}
-                style={styles.demoHelper}
-              >
-                <Text style={styles.demoHelperText}>
-                  Use demo credentials: <Text style={styles.demoHelperBold}>demo@voyaro.app / voyaro123</Text>
-                </Text>
-              </Pressable>
             </View>
+
 
             {/* Switch to Sign Up */}
             <View style={styles.signUpPrompt}>
               <Text style={styles.signUpText}>
-                Don't have an account?{' '}
+                {"Don't have an account? "}
                 <Text
                   style={styles.signUpLink}
                   onPress={() => router.push('/(auth)/signup')}

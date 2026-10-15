@@ -33,7 +33,9 @@
           "imageWidth": 76
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-secure-store",
+      "react-native-maps"
     ],
     "experiments": {
       "typedRoutes": true,

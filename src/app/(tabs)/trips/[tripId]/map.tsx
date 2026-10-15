@@ -5,7 +5,7 @@
  * for the current trip under the persistent TripSubNavHeader.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Platform,
   Pressable,
@@ -19,6 +19,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { getTripById } from '@/services/mockData';
 import { useShellInsets } from '@/components/navigation';
+import { VoyaroMapView, MapMarkerItem, MapRegion } from '@/components/maps';
 
 interface MapStop {
   id: string;
@@ -30,6 +31,8 @@ interface MapStop {
   hotel: string;
   temp: string;
   pinType: 'start' | 'transit' | 'end';
+  latitude: number;
+  longitude: number;
 }
 
 const JAPAN_STOPS: MapStop[] = [
@@ -43,6 +46,8 @@ const JAPAN_STOPS: MapStop[] = [
     hotel: 'Hotel Gracery Shinjuku',
     temp: '16°C · Sunny',
     pinType: 'start',
+    latitude: 35.6762,
+    longitude: 139.6503,
   },
   {
     id: 'hakone',
@@ -54,6 +59,8 @@ const JAPAN_STOPS: MapStop[] = [
     hotel: 'Hakone Ginyu Onsen',
     temp: '13°C · Crisp',
     pinType: 'transit',
+    latitude: 35.2323,
+    longitude: 139.1069,
   },
   {
     id: 'kyoto',
@@ -65,6 +72,8 @@ const JAPAN_STOPS: MapStop[] = [
     hotel: 'Ace Hotel Kyoto',
     temp: '17°C · Clear',
     pinType: 'transit',
+    latitude: 35.0116,
+    longitude: 135.7681,
   },
   {
     id: 'osaka',
@@ -76,8 +85,17 @@ const JAPAN_STOPS: MapStop[] = [
     hotel: 'Cross Hotel Osaka',
     temp: '18°C · Mild',
     pinType: 'end',
+    latitude: 34.6937,
+    longitude: 135.5023,
   },
 ];
+
+const INITIAL_REGION: MapRegion = {
+  latitude: 35.3606,
+  longitude: 137.5,
+  latitudeDelta: 2.8,
+  longitudeDelta: 4.5,
+};
 
 export default function TripMapScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
@@ -87,6 +105,18 @@ export default function TripMapScreen() {
 
   const [selectedStopId, setSelectedStopId] = useState<string>('tokyo');
   const activeStop = JAPAN_STOPS.find((s) => s.id === selectedStopId) || JAPAN_STOPS[0];
+
+  const mapMarkers: MapMarkerItem[] = useMemo(() => {
+    return JAPAN_STOPS.map((stop) => ({
+      id: stop.id,
+      title: stop.city,
+      description: stop.highlight,
+      coordinate: {
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+      },
+    }));
+  }, []);
 
   const handleItineraryShortcut = () => {
     router.push(`/(tabs)/trips/${effectiveTripId}/itinerary`);
@@ -103,71 +133,19 @@ export default function TripMapScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
-          {/* ── 1. Map Canvas Hero Preview ───────────────────────────────── */}
+          {/* ── 1. Map Canvas Hero Preview (Native & Web) ──────────────────── */}
           <View style={styles.mapCanvasCard}>
-            {/* Visual Route Diagram Map Surface */}
-            <View style={styles.mapGraphicSurface}>
-              {/* Background Geographic Grids */}
-              <View style={styles.mapGridPattern} />
-
-              {/* Connecting Journey Line */}
-              <View style={styles.routeTrackLine} />
-
-              {/* Interactive Route Pins */}
-              {JAPAN_STOPS.map((stop, index) => {
-                const isSelected = stop.id === selectedStopId;
-                // Position pins across the map canvas
-                const leftPercent = 14 + index * 24;
-                const topPercent = 28 + (index % 2 === 0 ? 0 : 26);
-
-                return (
-                  <Pressable
-                    key={stop.id}
-                    onPress={() => setSelectedStopId(stop.id)}
-                    style={[
-                      styles.mapPinWrapper,
-                      { left: `${leftPercent}%`, top: `${topPercent}%` },
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Select stop ${stop.city}`}
-                  >
-                    <View
-                      style={[
-                        styles.mapPinCircle,
-                        isSelected && styles.mapPinCircleActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.mapPinIndex,
-                          isSelected && styles.mapPinIndexActive,
-                        ]}
-                      >
-                        {index + 1}
-                      </Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.pinLabelBadge,
-                        isSelected && styles.pinLabelBadgeActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.pinLabelText,
-                          isSelected && styles.pinLabelTextActive,
-                        ]}
-                      >
-                        {stop.city}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
+            <VoyaroMapView
+              testID="trip-map-view"
+              style={styles.mapSurface}
+              initialRegion={INITIAL_REGION}
+              markers={mapMarkers}
+              selectedMarkerId={selectedStopId}
+              onMarkerPress={(marker) => setSelectedStopId(marker.id)}
+            />
 
             {/* Floating Map Overlay Controls */}
-            <View style={styles.mapOverlayHeader}>
+            <View style={styles.mapOverlayHeader} pointerEvents="box-none">
               <View style={styles.routePill}>
                 <Image
                   source={require('@/assets/images/icons/location-pin.svg')}
@@ -308,7 +286,7 @@ const styles = StyleSheet.create({
 
   // --- Map Canvas ---
   mapCanvasCard: {
-    height: 240,
+    minHeight: 260,
     backgroundColor: '#E8EFEA',
     borderRadius: radius.card,
     overflow: 'hidden',
@@ -317,73 +295,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(44, 95, 94, 0.12)',
     ...shadows.card,
   },
-  mapGraphicSurface: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: 'center',
-    alignItems: 'center',
+  mapSurface: {
+    width: '100%',
+    height: 260,
   },
-  mapGridPattern: {
-    ...StyleSheet.absoluteFill,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-  },
-  routeTrackLine: {
-    position: 'absolute',
-    left: '18%',
-    right: '18%',
-    top: '46%',
-    height: 4,
-    backgroundColor: colors.primary,
-    borderRadius: 2,
-    opacity: 0.4,
-  },
-  mapPinWrapper: {
-    position: 'absolute',
-    alignItems: 'center',
-    transform: [{ translateX: -18 }, { translateY: -18 }],
-  },
-  mapPinCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: colors.primary,
-    ...shadows.card,
-  },
-  mapPinCircleActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.surface,
-    transform: [{ scale: 1.15 }],
-  },
-  mapPinIndex: {
-    fontFamily: fontFamily.semiBold,
-    fontSize: 13,
-    color: colors.primary,
-  },
-  mapPinIndexActive: {
-    color: colors.textOnPrimary,
-  },
-  pinLabelBadge: {
-    marginTop: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radius.button,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-  },
-  pinLabelBadgeActive: {
-    backgroundColor: colors.primary,
-  },
-  pinLabelText: {
-    fontFamily: fontFamily.medium,
-    fontSize: 11,
-    color: colors.textPrimary,
-  },
-  pinLabelTextActive: {
-    color: colors.textOnPrimary,
-  },
-
   mapOverlayHeader: {
     position: 'absolute',
     top: 12,
@@ -392,6 +307,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    zIndex: 5,
   },
   routePill: {
     flexDirection: 'row',
