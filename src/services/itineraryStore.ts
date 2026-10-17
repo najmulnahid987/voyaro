@@ -46,6 +46,10 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
     location: 'Hazrat Shahjalal Int. (DAC) → Narita Int. (NRT)',
     notes: 'Window seats requested. Checked baggage allowance included (23kg).',
     confirmationNumber: 'EK-982134',
+    latitude: 23.8433,
+    longitude: 90.3978,
+    endLatitude: 35.7720,
+    endLongitude: 140.3929,
     metadata: {
       airline: 'Emirates',
       flightNumber: 'EK585',
@@ -70,6 +74,8 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
     location: 'Kamogawa Nijo-Ohashi Hotori, Nakagyo Ward, Kyoto',
     notes: 'River view suite requested with traditional Japanese garden breakfast.',
     confirmationNumber: 'RC-KYOTO-4891',
+    latitude: 35.0116,
+    longitude: 135.7681,
     metadata: {
       hotelName: 'The Ritz-Carlton, Kyoto',
       address: 'Kamogawa Nijo-Ohashi Hotori, Nakagyo Ward, Kyoto, 604-0902',
@@ -92,6 +98,8 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
     location: 'Shibuya, Tokyo',
     notes: 'Meet local guide near Hachiko Statue exit. Wear walking shoes.',
     confirmationNumber: 'TK-ACT-7712',
+    latitude: 35.6595,
+    longitude: 139.7004,
     metadata: {
       category: 'Sightseeing & Walking Tour',
       website: 'https://tokyowalkingtours.jp',
@@ -112,6 +120,10 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
     location: 'Tokyo Station → Kyoto Station',
     notes: 'Reserved seats on the right side for Mount Fuji scenic view.',
     confirmationNumber: 'JR-NOZOMI-5542',
+    latitude: 35.6812,
+    longitude: 139.7671,
+    endLatitude: 34.9858,
+    endLongitude: 135.7588,
     metadata: {
       transportationType: 'train',
       from: 'Tokyo Station (Platform 14)',
@@ -133,6 +145,8 @@ const INITIAL_SEED_ITEMS: ConcreteItineraryItem[] = [
     location: 'Fushimi Ward, Kyoto',
     notes: 'Sunset trek through the thousands of vermilion torii gates.',
     confirmationNumber: 'KY-ACT-3021',
+    latitude: 34.9671,
+    longitude: 135.7727,
     metadata: {
       category: 'Hiking & Cultural Experience',
       ticketInformation: 'Free admission / Self-guided',
@@ -166,7 +180,7 @@ function isDevMockTrip(tripId?: string): boolean {
 }
 
 function normalizeTripId(tripId?: string): string {
-  if (!tripId) return 'japan-adventure';
+  if (!tripId) return '';
   if (tripId === 'demo-trip') return 'japan-adventure';
   return tripId;
 }
@@ -196,6 +210,7 @@ export function clearItineraryCache(): void {
  */
 export async function listItineraryItems(tripId?: string): Promise<ConcreteItineraryItem[]> {
   const normalized = normalizeTripId(tripId);
+  if (!normalized) return [];
 
   // If this is a development mock trip and we are in dev mode, return local seed data
   if (isDevMockTrip(tripId)) {
@@ -299,9 +314,12 @@ export async function addItem(
   }
 
   const normalizedTripId = normalizeTripId(item.tripId);
+  if (!normalizedTripId) {
+    throw new Error('Cannot add itinerary item: Trip ID is required.');
+  }
 
   // If this is a dev route, insert into local seed items
-  if (isDevMockTrip(item.tripId)) {
+  if (isDevMockTrip(normalizedTripId)) {
     const newItem: ConcreteItineraryItem = {
       id: (item as ConcreteItineraryItem).id || `itin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       tripId: normalizedTripId,
@@ -312,6 +330,10 @@ export async function addItem(
       location: item.location?.trim() || undefined,
       notes: item.notes?.trim() || undefined,
       confirmationNumber: item.confirmationNumber?.trim() || undefined,
+      latitude: typeof item.latitude === 'number' ? item.latitude : undefined,
+      longitude: typeof item.longitude === 'number' ? item.longitude : undefined,
+      endLatitude: typeof item.endLatitude === 'number' ? item.endLatitude : undefined,
+      endLongitude: typeof item.endLongitude === 'number' ? item.endLongitude : undefined,
       metadata: validateAndNormalizeMetadata(item.type, item.metadata),
     } as ConcreteItineraryItem;
 
@@ -381,6 +403,10 @@ export async function updateItem(
       id: existing.id,
       tripId: existing.tripId,
       type: existing.type,
+      latitude: changes.latitude === null ? undefined : (changes.latitude !== undefined ? changes.latitude : existing.latitude),
+      longitude: changes.longitude === null ? undefined : (changes.longitude !== undefined ? changes.longitude : existing.longitude),
+      endLatitude: changes.endLatitude === null ? undefined : (changes.endLatitude !== undefined ? changes.endLatitude : existing.endLatitude),
+      endLongitude: changes.endLongitude === null ? undefined : (changes.endLongitude !== undefined ? changes.endLongitude : existing.endLongitude),
       metadata: validateAndNormalizeMetadata(existing.type, {
         ...(existing.metadata as any),
         ...(changes.metadata as any),
@@ -497,6 +523,7 @@ export async function clearItems(tripId?: string): Promise<void> {
  */
 export function getItems(tripId?: string): ConcreteItineraryItem[] {
   const normalized = normalizeTripId(tripId);
+  if (!normalized) return [];
   return sortItineraryItems(itemsStore.filter((item) => item.tripId === normalized));
 }
 

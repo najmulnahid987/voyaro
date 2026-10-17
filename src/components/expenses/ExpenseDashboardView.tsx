@@ -15,9 +15,9 @@
  */
 
 import { useShellInsets } from '@/components/navigation';
-import { useTripExpenses } from '@/services/expenseStore';
-import { getAllTrips, getTripById, getTripTravelers } from '@/services/mockData';
-import { getCachedTrips } from '@/services/trip';
+import { isDevMockTrip, useTripExpenses } from '@/services/expenseStore';
+import { Trip, getTripById, getTripTravelers } from '@/services/mockData';
+import { getActiveTripId, getCachedTrips, listTrips, setActiveTripId as setGlobalActiveTripId, subscribeToTrips } from '@/services/trip';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { Expense } from '@/types/expense';
 import {
@@ -26,7 +26,7 @@ import {
 } from '@/utils/currencyUtils';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -75,23 +75,78 @@ export function ExpenseDashboardView({
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
   // 1. Resolve Trip Reference
-  const allMockTrips = getAllTrips();
-  const cachedTrips = getCachedTrips() || [];
-  const effectiveAllTrips = cachedTrips.length > 0 ? cachedTrips : allMockTrips;
+  const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
 
-  const [activeTripId, setActiveTripId] = useState<string>(
-    () => tripId || effectiveAllTrips[0]?.id || 'japan-adventure'
-  );
+  useEffect(() => {
+    let isMounted = true;
+    const unsub = subscribeToTrips((updated) => {
+      if (isMounted) setUserTrips(updated);
+    });
+    listTrips()
+      .then((fetched) => {
+        if (isMounted) setUserTrips(fetched);
+      })
+      .catch((err) => {
+        console.warn('[ExpenseDashboardView] listTrips error:', err);
+      });
+    return () => {
+      isMounted = false;
+      unsub();
+    };
+  }, []);
+
+  const effectiveAllTrips = useMemo(() => {
+    if (userTrips.length > 0) return userTrips;
+    const cached = getCachedTrips();
+    if (cached && cached.length > 0) return cached;
+    return [];
+  }, [userTrips]);
+
+  const [activeTripId, setActiveTripId] = useState<string>(() => {
+    if (tripId) return tripId;
+    const globalActive = getActiveTripId();
+    if (globalActive) return globalActive;
+    const cached = getCachedTrips();
+    return cached && cached.length > 0 ? cached[0].id : '';
+  });
+
   const [showTripMenu, setShowTripMenu] = useState<boolean>(false);
   const [showBudgetModal, setShowBudgetModal] = useState<boolean>(false);
 
-  // If prop tripId changes, sync internal state
+  // Sync internal state if prop tripId or loaded trips change
   const currentTripId = tripId || activeTripId;
-  const trip =
-    cachedTrips.find((t) => t.id === currentTripId) ||
-    getTripById(currentTripId) ||
-    effectiveAllTrips[0];
-  const travelers = useMemo(() => getTripTravelers(currentTripId), [currentTripId]);
+
+  useEffect(() => {
+    if (tripId) {
+      setActiveTripId(tripId);
+    } else if (!activeTripId && effectiveAllTrips.length > 0) {
+      const globalActive = getActiveTripId();
+      const match = globalActive && effectiveAllTrips.some((t) => t.id === globalActive);
+      setActiveTripId(match ? globalActive : effectiveAllTrips[0].id);
+    }
+  }, [tripId, effectiveAllTrips, activeTripId]);
+
+  useEffect(() => {
+    if (currentTripId) {
+      setGlobalActiveTripId(currentTripId);
+    }
+  }, [currentTripId]);
+
+  const trip = useMemo(() => {
+    if (!currentTripId) return effectiveAllTrips[0] || null;
+    return (
+      effectiveAllTrips.find((t) => t.id === currentTripId) ||
+      (isDevMockTrip(currentTripId) ? getTripById(currentTripId) : null) ||
+      effectiveAllTrips[0] ||
+      null
+    );
+  }, [currentTripId, effectiveAllTrips]);
+
+  const travelers = useMemo(() => {
+    if (!currentTripId) return [];
+    if (trip?.travelers && trip.travelers.length > 0) return trip.travelers;
+    return isDevMockTrip(currentTripId) ? getTripTravelers(currentTripId) : [];
+  }, [currentTripId, trip]);
 
   // 2. Subscribe to Trip Expenses & Budget State
   const { expenses, budget, summary, isEmpty, loading, error, refresh } =
@@ -148,7 +203,7 @@ export function ExpenseDashboardView({
   // Helper to map payer ID to traveler name
   const getPayerName = (paidBy?: string) => {
     if (!paidBy) return undefined;
-    const traveler = travelers.find((t) => t.id === paidBy);
+    const traveler = travelers.find((t: any) => t.id === paidBy);
     return traveler ? traveler.name : paidBy;
   };
 
@@ -236,7 +291,7 @@ export function ExpenseDashboardView({
                     accessibilityLabel="Switch trip"
                   >
                     <Text style={styles.tripTitle} numberOfLines={1}>
-                      {trip.title}
+                      {trip?.title || 'Trip Expenses'}
                     </Text>
                     <Text style={styles.tripSelectorArrow}>▼</Text>
                   </Pressable>

@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { Trip, getTripById as getDevMockTripById } from '@/services/mockData';
-import { fetchTripById, getCachedTrips } from '@/services/trip';
+import { fetchTripById, getActiveTripId, getCachedTrips, setActiveTripId } from '@/services/trip';
 import { useItinerary } from '@/services/itineraryStore';
 import {
   formatItineraryTime,
@@ -46,17 +46,24 @@ import { ItineraryItemCard } from '@/components/itinerary';
 
 export default function TripItineraryScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
-  const effectiveTripId = tripId || 'japan-adventure';
+  const effectiveTripId = tripId || getActiveTripId() || '';
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
+  useEffect(() => {
+    if (effectiveTripId) {
+      setActiveTripId(effectiveTripId);
+    }
+  }, [effectiveTripId]);
+
   const [trip, setTrip] = useState<Trip | null>(() => {
-    return getCachedTrips()?.find((t) => t.id === effectiveTripId) || null;
+    return (effectiveTripId ? getCachedTrips()?.find((t) => t.id === effectiveTripId) : null) || null;
   });
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     async function loadTrip() {
+      if (!effectiveTripId) return;
       try {
         const liveTrip = await fetchTripById(effectiveTripId);
         if (!isMounted) return;

@@ -32,9 +32,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
+import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
+import { Trip } from '@/services/mockData';
 import { ConcreteItineraryItem, HotelMetadata } from '@/types/itinerary';
 import { formatItineraryDate, parseDate } from '@/utils/itineraryDateUtils';
-import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { DateTimePickerField, LocationPickerField } from '@/components/ui';
 
 // ---------------------------------------------------------------------------
 // Helpers for Date & Time Formatting and Nights Calculation
@@ -74,12 +76,58 @@ function fmt12h(d: Date): string {
 
 export default function AddHotelScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
-  const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
 
   const existingItem = useMemo(() => {
     return itemId ? getItem(itemId) : undefined;
   }, [itemId]);
+
+  const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
+  const [selectedTripId, setSelectedTripId] = useState<string>(() => {
+    if (existingItem?.tripId) return existingItem.tripId;
+    if (tripId) return tripId;
+    const globalActive = getActiveTripId();
+    if (globalActive) return globalActive;
+    const cached = getCachedTrips();
+    return cached && cached.length > 0 ? cached[0].id : '';
+  });
+  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTrips() {
+      try {
+        const fetched = await listTrips();
+        if (!isMounted) return;
+        setUserTrips(fetched);
+        if (!selectedTripId && fetched.length > 0) {
+          const globalActive = getActiveTripId();
+          const match = globalActive && fetched.some((t) => t.id === globalActive);
+          setSelectedTripId(tripId || (match ? globalActive : fetched[0].id));
+        }
+      } catch (err) {
+        console.warn('[AddHotel] Error loading trips:', err);
+      }
+    }
+    loadTrips();
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId, selectedTripId]);
+
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (selectedTripId) {
+      fetchUserTripRole(selectedTripId).then((role) => {
+        if (isMounted) setUserRole(role);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTripId]);
 
   const isEditMode = Boolean(existingItem && existingItem.type === 'hotel');
   const hotelMeta = isEditMode ? (existingItem?.metadata as HotelMetadata) : undefined;
@@ -92,6 +140,12 @@ export default function AddHotelScreen() {
   );
   const [address, setAddress] = useState(
     () => hotelMeta?.address || existingItem?.location || (isEditMode ? '' : 'Tokyo Midtown, 9-7-1 Akasaka, Minato-ku, Tokyo')
+  );
+  const [latitude, setLatitude] = useState<number | undefined>(
+    () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
+  );
+  const [longitude, setLongitude] = useState<number | undefined>(
+    () => (typeof existingItem?.longitude === 'number' ? existingItem.longitude : undefined)
   );
 
   const [checkInObj, setCheckInObj] = useState<Date>(
@@ -116,19 +170,6 @@ export default function AddHotelScreen() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (effectiveTripId) {
-      fetchUserTripRole(effectiveTripId).then((r) => {
-        if (isMounted) setUserRole(r);
-      });
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [effectiveTripId]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -138,7 +179,7 @@ export default function AddHotelScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
+      router.push(selectedTripId ? (`/(tabs)/trips/${selectedTripId}/itinerary` as any) : ('/' as any));
     }
   };
 
@@ -154,6 +195,12 @@ export default function AddHotelScreen() {
 
     if (userRole === 'viewer') {
       Alert.alert('Permission Denied', 'Viewers have read-only access and cannot create or modify hotel reservations.');
+      return;
+    }
+
+    if (!selectedTripId) {
+      Alert.alert('No Trip Selected', 'Please select or create a trip first.');
+      setErrors((prev) => ({ ...prev, submit: 'Please select or create a trip first.' }));
       return;
     }
 
@@ -178,6 +225,8 @@ export default function AddHotelScreen() {
           location: address.trim() || hotelName.trim(),
           confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
           notes: notes.trim() || undefined,
+          latitude: typeof latitude === 'number' ? latitude : null,
+          longitude: typeof longitude === 'number' ? longitude : null,
           metadata: {
             ...hotelMeta,
             hotelName: hotelName.trim(),
@@ -192,7 +241,7 @@ export default function AddHotelScreen() {
         });
       } else {
         await addItem({
-          tripId: effectiveTripId,
+          tripId: selectedTripId,
           type: 'hotel',
           title: hotelName.trim(),
           startDateTime: startIso,
@@ -200,6 +249,8 @@ export default function AddHotelScreen() {
           location: address.trim() || hotelName.trim(),
           confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
           notes: notes.trim() || undefined,
+          latitude: typeof latitude === 'number' ? latitude : undefined,
+          longitude: typeof longitude === 'number' ? longitude : undefined,
           metadata: {
             hotelName: hotelName.trim(),
             address: address.trim(),
@@ -217,7 +268,7 @@ export default function AddHotelScreen() {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
+        router.push(`/(tabs)/trips/${selectedTripId}/itinerary` as any);
       }
     } catch (e: any) {
       console.warn('Error saving hotel:', e);
@@ -226,6 +277,7 @@ export default function AddHotelScreen() {
         ...prev,
         submit: e.message || 'Failed to save hotel. Please check the details and try again.',
       }));
+      Alert.alert('Save Failed', e.message || 'Failed to save hotel. Please check the details and try again.');
     }
   };
 
@@ -308,6 +360,53 @@ export default function AddHotelScreen() {
             </View>
           ) : null}
 
+          {/* ── Trip Selector (if user has multiple trips or no trip passed) ── */}
+          {userTrips.length > 0 && !isEditMode && (
+            <View style={styles.section}>
+              <Text style={styles.inputLabel}>Trip</Text>
+              <Pressable
+                onPress={() => setShowTripDropdown((prev) => !prev)}
+                style={styles.selectTrigger}
+                accessibilityRole="button"
+                accessibilityLabel="Select trip"
+              >
+                <View style={styles.selectTriggerLeft}>
+                  <Text style={styles.selectTriggerText} numberOfLines={1}>
+                    {userTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
+                  </Text>
+                </View>
+                <Text style={styles.selectTriggerArrow}>▼</Text>
+              </Pressable>
+
+              {showTripDropdown && (
+                <View style={styles.dropdownMenu}>
+                  {userTrips.map((t) => (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => {
+                        setSelectedTripId(t.id);
+                        setShowTripDropdown(false);
+                      }}
+                      style={[
+                        styles.dropdownItem,
+                        selectedTripId === t.id && styles.dropdownItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedTripId === t.id && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {t.title}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
           {/* ── 2. Hotel Basics Section ──────────────────────────────────── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Hotel Basics</Text>
@@ -346,26 +445,25 @@ export default function AddHotelScreen() {
                 ) : null}
               </View>
 
-              {/* Address */}
+              {/* Address with Location Search & Coordinate Selection */}
               <View style={[styles.fieldGroup, styles.fieldDivider]}>
-                <Text style={styles.inputLabel}>Address</Text>
-                <View style={styles.inputWrapper}>
-                  <View style={styles.inputIconBox}>
-                    <Image
-                      source={require('@/assets/images/icons/location-pin.svg')}
-                      style={styles.inputIcon}
-                      tintColor={colors.textSecondary}
-                      contentFit="contain"
-                    />
-                  </View>
-                  <TextInput
-                    style={styles.textInput}
-                    value={address}
-                    onChangeText={setAddress}
-                    placeholder="e.g. 1-1-1 Marunouchi, Chiyoda-ku, Tokyo"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
+                <LocationPickerField
+                  label="Address & Map Location"
+                  value={address}
+                  onChangeText={setAddress}
+                  placeholder="e.g. 1-1-1 Marunouchi, Chiyoda-ku, Tokyo"
+                  coordinates={typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : null}
+                  onSelectLocation={({ address: resolvedAddr, latitude: lat, longitude: lng }) => {
+                    setLatitude(lat);
+                    setLongitude(lng);
+                    if (resolvedAddr) setAddress(resolvedAddr);
+                  }}
+                  onClearCoordinates={() => {
+                    setLatitude(undefined);
+                    setLongitude(undefined);
+                  }}
+                  testID="hotel-location-picker"
+                />
               </View>
             </View>
           </View>
@@ -973,5 +1071,57 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.error,
     textAlign: 'center',
+  },
+  selectTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    paddingHorizontal: spacing.md,
+    height: 48,
+    marginTop: spacing.xs,
+  },
+  selectTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  selectTriggerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  selectTriggerArrow: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  dropdownMenu: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    overflow: 'hidden',
+    ...shadows.sheet,
+  },
+  dropdownItem: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemActive: {
+    backgroundColor: 'rgba(44, 95, 94, 0.08)',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  dropdownItemTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

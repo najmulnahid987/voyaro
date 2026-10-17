@@ -33,8 +33,10 @@ import { Image } from 'expo-image';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
+import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
+import { Trip } from '@/services/mockData';
 import { ConcreteItineraryItem, TransportationMetadata, TransportationType } from '@/types/itinerary';
-import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { DateTimePickerField, LocationPickerField } from '@/components/ui';
 import { isMultiDayItem, parseDate } from '@/utils/itineraryDateUtils';
 
 // ---------------------------------------------------------------------------
@@ -112,12 +114,44 @@ function formatTime12h(time24: string): string {
 
 export default function AddTransportationScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
-  const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
 
   const existingItem = useMemo(() => {
     return itemId ? getItem(itemId) : undefined;
   }, [itemId]);
+
+  const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
+  const [selectedTripId, setSelectedTripId] = useState<string>(() => {
+    if (existingItem?.tripId) return existingItem.tripId;
+    if (tripId) return tripId;
+    const globalActive = getActiveTripId();
+    if (globalActive) return globalActive;
+    const cached = getCachedTrips();
+    return cached && cached.length > 0 ? cached[0].id : '';
+  });
+  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTrips() {
+      try {
+        const fetched = await listTrips();
+        if (!isMounted) return;
+        setUserTrips(fetched);
+        if (!selectedTripId && fetched.length > 0) {
+          const globalActive = getActiveTripId();
+          const match = globalActive && fetched.some((t) => t.id === globalActive);
+          setSelectedTripId(tripId || (match ? globalActive : fetched[0].id));
+        }
+      } catch (err) {
+        console.warn('[AddTransportation] Error loading trips:', err);
+      }
+    }
+    loadTrips();
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId, selectedTripId]);
 
   const isEditMode = Boolean(existingItem && existingItem.type === 'transportation');
   const transMeta = isEditMode ? (existingItem?.metadata as TransportationMetadata) : undefined;
@@ -133,6 +167,18 @@ export default function AddTransportationScreen() {
   );
   const [toLocation, setToLocation] = useState(
     () => transMeta?.to || (isEditMode ? '' : 'Kyoto Station')
+  );
+  const [fromLat, setFromLat] = useState<number | undefined>(
+    () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
+  );
+  const [fromLng, setFromLng] = useState<number | undefined>(
+    () => (typeof existingItem?.longitude === 'number' ? existingItem.longitude : undefined)
+  );
+  const [toLat, setToLat] = useState<number | undefined>(
+    () => (typeof existingItem?.endLatitude === 'number' ? existingItem.endLatitude : undefined)
+  );
+  const [toLng, setToLng] = useState<number | undefined>(
+    () => (typeof existingItem?.endLongitude === 'number' ? existingItem.endLongitude : undefined)
   );
   const [providerRoute, setProviderRoute] = useState(
     () => transMeta?.provider || (isEditMode ? '' : 'Tokaido Shinkansen')
@@ -187,15 +233,17 @@ export default function AddTransportationScreen() {
 
   useEffect(() => {
     let isMounted = true;
-    if (effectiveTripId) {
-      fetchUserTripRole(effectiveTripId).then((r) => {
+    if (selectedTripId) {
+      fetchUserTripRole(selectedTripId).then((r) => {
         if (isMounted) setUserRole(r);
       });
+    } else {
+      setUserRole(null);
     }
     return () => {
       isMounted = false;
     };
-  }, [effectiveTripId]);
+  }, [selectedTripId]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -203,15 +251,25 @@ export default function AddTransportationScreen() {
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
+    } else if (selectedTripId) {
+      router.push(`/(tabs)/trips/${selectedTripId}/itinerary` as any);
     } else {
-      router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
+      router.push('/(tabs)/trips');
     }
   };
 
   const handleSwapLocations = () => {
-    const temp = fromLocation;
+    const tempLoc = fromLocation;
+    const tempLat = fromLat;
+    const tempLng = fromLng;
+
     setFromLocation(toLocation);
-    setToLocation(temp);
+    setFromLat(toLat);
+    setFromLng(toLng);
+
+    setToLocation(tempLoc);
+    setToLat(tempLat);
+    setToLng(tempLng);
   };
 
   const validate = (): boolean => {
@@ -233,6 +291,12 @@ export default function AddTransportationScreen() {
 
     if (userRole === 'viewer') {
       Alert.alert('Permission Denied', 'Viewers have read-only access and cannot create or modify transportation bookings.');
+      return;
+    }
+
+    if (!selectedTripId) {
+      Alert.alert('No Trip Selected', 'Please select or create a trip first.');
+      setErrors((prev) => ({ ...prev, submit: 'Please select or create a trip first.' }));
       return;
     }
 
@@ -274,6 +338,10 @@ export default function AddTransportationScreen() {
           location: `${fromLocation.trim()} → ${toLocation.trim()}`,
           notes: notes.trim() || undefined,
           confirmationNumber: bookingNumber.trim() || undefined,
+          latitude: typeof fromLat === 'number' ? fromLat : null,
+          longitude: typeof fromLng === 'number' ? fromLng : null,
+          endLatitude: typeof toLat === 'number' ? toLat : null,
+          endLongitude: typeof toLng === 'number' ? toLng : null,
           metadata: {
             ...transMeta,
             transportationType: selectedType,
@@ -288,7 +356,7 @@ export default function AddTransportationScreen() {
         });
       } else {
         await addItem({
-          tripId: effectiveTripId,
+          tripId: selectedTripId,
           type: 'transportation',
           title,
           startDateTime: startIso,
@@ -296,6 +364,10 @@ export default function AddTransportationScreen() {
           location: `${fromLocation.trim()} → ${toLocation.trim()}`,
           notes: notes.trim() || undefined,
           confirmationNumber: bookingNumber.trim() || undefined,
+          latitude: typeof fromLat === 'number' ? fromLat : undefined,
+          longitude: typeof fromLng === 'number' ? fromLng : undefined,
+          endLatitude: typeof toLat === 'number' ? toLat : undefined,
+          endLongitude: typeof toLng === 'number' ? toLng : undefined,
           metadata: {
             transportationType: selectedType,
             from: fromLocation.trim(),
@@ -312,8 +384,10 @@ export default function AddTransportationScreen() {
       // 4. Return to previous screen (Details or Timeline)
       if (router.canGoBack()) {
         router.back();
+      } else if (selectedTripId) {
+        router.push(`/(tabs)/trips/${selectedTripId}/itinerary` as any);
       } else {
-        router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
+        router.push('/(tabs)/trips');
       }
     } catch (e: any) {
       console.warn('Error adding transportation item:', e);
@@ -379,6 +453,55 @@ export default function AddTransportationScreen() {
               <Text style={styles.errorBannerText}>{errors.submit}</Text>
             </View>
           ) : null}
+
+          {/* ── Trip Selector (Shown when user has multiple trips) ─── */}
+          {userTrips.length > 1 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionLabel}>TRIP</Text>
+              </View>
+              <Pressable
+                onPress={() => setShowTripDropdown((prev) => !prev)}
+                style={styles.selectTrigger}
+                accessibilityRole="button"
+                accessibilityLabel="Select trip"
+              >
+                <View style={styles.selectTriggerLeft}>
+                  <Text style={styles.selectTriggerText} numberOfLines={1}>
+                    {userTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
+                  </Text>
+                </View>
+                <Text style={styles.selectTriggerArrow}>▼</Text>
+              </Pressable>
+
+              {showTripDropdown && (
+                <View style={styles.dropdownMenu}>
+                  {userTrips.map((t) => (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => {
+                        setSelectedTripId(t.id);
+                        setShowTripDropdown(false);
+                      }}
+                      style={[
+                        styles.dropdownItem,
+                        selectedTripId === t.id && styles.dropdownItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedTripId === t.id && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {t.title}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* ── Section 1: Transportation Type Selector ──────────────── */}
           <View style={styles.section}>
@@ -463,6 +586,26 @@ export default function AddTransportationScreen() {
                       Boolean(errors.fromLocation) && styles.inputFieldError,
                     ]}
                   />
+                  <LocationPickerField
+                    value={fromLocation}
+                    onChangeText={(t) => {
+                      setFromLocation(t);
+                      if (errors.fromLocation) {
+                        setErrors((prev) => ({ ...prev, fromLocation: '' }));
+                      }
+                    }}
+                    placeholder="Pin departure on map"
+                    coordinates={typeof fromLat === 'number' && typeof fromLng === 'number' ? { latitude: fromLat, longitude: fromLng } : null}
+                    onSelectLocation={({ latitude: lat, longitude: lng }) => {
+                      setFromLat(lat);
+                      setFromLng(lng);
+                    }}
+                    onClearCoordinates={() => {
+                      setFromLat(undefined);
+                      setFromLng(undefined);
+                    }}
+                    testID="trans-from-location-picker"
+                  />
                   {errors.fromLocation ? (
                     <Text style={styles.errorText}>{errors.fromLocation}</Text>
                   ) : null}
@@ -518,6 +661,26 @@ export default function AddTransportationScreen() {
                       styles.inputField,
                       Boolean(errors.toLocation) && styles.inputFieldError,
                     ]}
+                  />
+                  <LocationPickerField
+                    value={toLocation}
+                    onChangeText={(t) => {
+                      setToLocation(t);
+                      if (errors.toLocation) {
+                        setErrors((prev) => ({ ...prev, toLocation: '' }));
+                      }
+                    }}
+                    placeholder="Pin arrival on map"
+                    coordinates={typeof toLat === 'number' && typeof toLng === 'number' ? { latitude: toLat, longitude: toLng } : null}
+                    onSelectLocation={({ latitude: lat, longitude: lng }) => {
+                      setToLat(lat);
+                      setToLng(lng);
+                    }}
+                    onClearCoordinates={() => {
+                      setToLat(undefined);
+                      setToLng(undefined);
+                    }}
+                    testID="trans-to-location-picker"
                   />
                   {errors.toLocation ? (
                     <Text style={styles.errorText}>{errors.toLocation}</Text>
@@ -1415,5 +1578,57 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.error,
     textAlign: 'center',
+  },
+  selectTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    paddingHorizontal: spacing.md,
+    height: 48,
+    marginTop: spacing.xs,
+  },
+  selectTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  selectTriggerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  selectTriggerArrow: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  dropdownMenu: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    overflow: 'hidden',
+    ...shadows.sheet,
+  },
+  dropdownItem: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemActive: {
+    backgroundColor: 'rgba(44, 95, 94, 0.08)',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  dropdownItemTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

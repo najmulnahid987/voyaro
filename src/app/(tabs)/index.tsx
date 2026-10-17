@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useShellInsets } from '@/components/navigation';
 import { Trip, MOCK_COMING_UP_EVENTS } from '@/services/mockData';
-import { listTrips, subscribeToTrips, getCachedTrips } from '@/services/trip';
+import { listTrips, subscribeToTrips, getCachedTrips, setActiveTripId } from '@/services/trip';
 import { useTripExpenses } from '@/services/expenseStore';
 import { useItinerary } from '@/services/itineraryStore';
 import { formatItineraryTime } from '@/utils/itineraryDateUtils';
@@ -86,6 +86,12 @@ export default function HomeScreen() {
     if (upcoming) return upcoming;
     return trips[0];
   }, [trips]);
+
+  useEffect(() => {
+    if (currentTrip?.id) {
+      setActiveTripId(currentTrip.id);
+    }
+  }, [currentTrip?.id]);
 
   // Determine past trips
   const pastTrips: Trip[] = useMemo(() => {

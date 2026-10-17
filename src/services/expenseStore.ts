@@ -208,7 +208,10 @@ function notify(): void {
 }
 
 export function normalizeTripId(tripId?: string): string {
-  if (!tripId || tripId === 'demo-trip') {
+  if (!tripId) {
+    return '';
+  }
+  if (tripId === 'demo-trip') {
     return 'japan-adventure';
   }
   return tripId;
@@ -239,6 +242,9 @@ export function clearExpenseCache(): void {
  */
 export async function fetchExpensesByTrip(tripId?: string): Promise<Expense[]> {
   const normalized = normalizeTripId(tripId);
+  if (!normalized) {
+    return [];
+  }
 
   // If this is a development mock trip, return local cached dataset
   if (isDevMockTrip(tripId)) {
@@ -279,6 +285,7 @@ export async function fetchExpensesByTrip(tripId?: string): Promise<Expense[]> {
  */
 export function getExpensesByTrip(tripId?: string): Expense[] {
   const normalized = normalizeTripId(tripId);
+  if (!normalized) return [];
   return expensesStore
     .filter((e) => e.tripId === normalized)
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -350,6 +357,9 @@ export async function addExpense(
   input: CreateExpenseInput | Expense
 ): Promise<Expense> {
   const normTripId = normalizeTripId(input.tripId);
+  if (!normTripId) {
+    throw new Error('Cannot add expense: Trip ID is required.');
+  }
 
   // 1. Verify trip existence for non-UUID strings
   const isLikelyUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(normTripId);

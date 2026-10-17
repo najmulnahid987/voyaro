@@ -4,7 +4,7 @@ import { Stack, useLocalSearchParams, usePathname } from 'expo-router';
 import { colors } from '@/theme';
 import { TripSubNavHeader, TripSubNavTabKey } from '@/components/trips';
 import { useShellInsets } from '@/components/navigation';
-import { fetchTripById, getCachedTrips } from '@/services/trip';
+import { fetchTripById, getCachedTrips, setActiveTripId } from '@/services/trip';
 import { Trip } from '@/services/mockData';
 
 /**
@@ -16,17 +16,18 @@ import { Trip } from '@/services/mockData';
  */
 export default function TripDetailLayout() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
-  const effectiveTripId = tripId || 'japan-adventure';
+  const effectiveTripId = tripId;
   const pathname = usePathname();
   const { contentPaddingTop } = useShellInsets();
 
   const [trip, setTrip] = useState<Trip | null>(() => {
-    return getCachedTrips()?.find((t) => t.id === effectiveTripId) || null;
+    return effectiveTripId ? getCachedTrips()?.find((t) => t.id === effectiveTripId) || null : null;
   });
 
   useEffect(() => {
     let isMounted = true;
     if (effectiveTripId) {
+      setActiveTripId(effectiveTripId);
       fetchTripById(effectiveTripId).then((t) => {
         if (isMounted && t) {
           setTrip(t);

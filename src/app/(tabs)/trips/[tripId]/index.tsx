@@ -12,8 +12,8 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { fetchTripById, deleteTrip, setActiveTripId } from '@/services/trip';
 import { Trip, getTripById as getDevMockTripById } from '@/services/mockData';
-import { fetchTripById, deleteTrip } from '@/services/trip';
 import { leaveTrip } from '@/services/collaboration';
 import { AvatarGroup, Badge } from '@/components/ui';
 import { useShellInsets } from '@/components/navigation';
@@ -46,6 +46,7 @@ export default function TripOverviewScreen() {
       }
       return;
     }
+    setActiveTripId(tripId);
     if (isMountedRef.current) {
       setLoading(true);
       setError(null);
@@ -341,7 +342,7 @@ export default function TripOverviewScreen() {
             >
               <View style={styles.travelersStripLeft}>
                 <AvatarGroup
-                  avatars={(trip.travelers || []).map((t) => ({
+                  avatars={(trip.travelers || []).map((t: any) => ({
                     name: t.name,
                     source: t.avatarUrl,
                   }))}

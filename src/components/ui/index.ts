@@ -45,3 +45,10 @@ export type { SectionHeaderProps } from './SectionHeader';
 
 export { OnboardingHeader } from './OnboardingHeader';
 export type { OnboardingHeaderProps } from './OnboardingHeader';
+
+export { LocationPickerField } from './LocationPickerField';
+export type { LocationPickerFieldProps } from './LocationPickerField';
+
+export { DateTimePickerField } from './DateTimePickerField';
+export type { DateTimePickerFieldProps } from './DateTimePickerField';
+

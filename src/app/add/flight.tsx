@@ -32,9 +32,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { addItem, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
+import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
+import { Trip } from '@/services/mockData';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConcreteItineraryItem, FlightMetadata } from '@/types/itinerary';
-import { DateTimePickerField } from '@/components/ui/DateTimePickerField';
+import { DateTimePickerField, LocationPickerField } from '@/components/ui';
 import { parseDate } from '@/utils/itineraryDateUtils';
 
 // ---------------------------------------------------------------------------
@@ -85,12 +87,58 @@ type CabinClass = (typeof CABIN_CLASSES)[number];
 
 export default function AddFlightScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
-  const effectiveTripId = tripId || 'japan-adventure';
   const insets = useSafeAreaInsets();
 
   const existingItem = useMemo(() => {
     return itemId ? getItem(itemId) : undefined;
   }, [itemId]);
+
+  const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
+  const [selectedTripId, setSelectedTripId] = useState<string>(() => {
+    if (existingItem?.tripId) return existingItem.tripId;
+    if (tripId) return tripId;
+    const globalActive = getActiveTripId();
+    if (globalActive) return globalActive;
+    const cached = getCachedTrips();
+    return cached && cached.length > 0 ? cached[0].id : '';
+  });
+  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadTrips() {
+      try {
+        const fetched = await listTrips();
+        if (!isMounted) return;
+        setUserTrips(fetched);
+        if (!selectedTripId && fetched.length > 0) {
+          const globalActive = getActiveTripId();
+          const match = globalActive && fetched.some((t) => t.id === globalActive);
+          setSelectedTripId(tripId || (match ? globalActive : fetched[0].id));
+        }
+      } catch (err) {
+        console.warn('[AddFlight] Error loading trips:', err);
+      }
+    }
+    loadTrips();
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId, selectedTripId]);
+
+  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (selectedTripId) {
+      fetchUserTripRole(selectedTripId).then((role) => {
+        if (isMounted) setUserRole(role);
+      });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTripId]);
 
   const isEditMode = Boolean(existingItem && existingItem.type === 'flight');
   const flightMeta = isEditMode ? (existingItem?.metadata as FlightMetadata) : undefined;
@@ -104,10 +152,23 @@ export default function AddFlightScreen() {
     () => flightMeta?.departureCity || flightMeta?.departureAirport || (isEditMode ? '' : 'Dhaka, Bangladesh')
   );
   const [departureCode, setDepartureCode] = useState(() => flightMeta?.departureAirport || (isEditMode ? '' : 'DAC'));
+  const [departureLat, setDepartureLat] = useState<number | undefined>(
+    () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
+  );
+  const [departureLng, setDepartureLng] = useState<number | undefined>(
+    () => (typeof existingItem?.longitude === 'number' ? existingItem.longitude : undefined)
+  );
+
   const [arrivalAirport, setArrivalAirport] = useState(
     () => flightMeta?.arrivalCity || flightMeta?.arrivalAirport || (isEditMode ? '' : 'Tokyo, Japan')
   );
   const [arrivalCode, setArrivalCode] = useState(() => flightMeta?.arrivalAirport || (isEditMode ? '' : 'NRT'));
+  const [arrivalLat, setArrivalLat] = useState<number | undefined>(
+    () => (typeof existingItem?.endLatitude === 'number' ? existingItem.endLatitude : undefined)
+  );
+  const [arrivalLng, setArrivalLng] = useState<number | undefined>(
+    () => (typeof existingItem?.endLongitude === 'number' ? existingItem.endLongitude : undefined)
+  );
 
   const [departureDateObj, setDepartureDateObj] = useState<Date>(
     () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-10T20:30:00'))
@@ -136,19 +197,6 @@ export default function AddFlightScreen() {
   const [isClassPickerOpen, setIsClassPickerOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (effectiveTripId) {
-      fetchUserTripRole(effectiveTripId).then((r) => {
-        if (isMounted) setUserRole(r);
-      });
-    }
-    return () => {
-      isMounted = false;
-    };
-  }, [effectiveTripId]);
 
   // -------------------------------------------------------------------------
   // Handlers
@@ -157,10 +205,18 @@ export default function AddFlightScreen() {
   const handleSwapRoute = () => {
     const tempAirport = departureAirport;
     const tempCode = departureCode;
+    const tempLat = departureLat;
+    const tempLng = departureLng;
+
     setDepartureAirport(arrivalAirport);
-    setDepartureCode(arrivalCode);
+    setArrivalCode(arrivalCode);
+    setDepartureLat(arrivalLat);
+    setDepartureLng(arrivalLng);
+
     setArrivalAirport(tempAirport);
     setArrivalCode(tempCode);
+    setArrivalLat(tempLat);
+    setArrivalLng(tempLng);
   };
 
   const handleDepartureChange = (text: string) => {
@@ -183,7 +239,7 @@ export default function AddFlightScreen() {
     if (router.canGoBack()) {
       router.back();
     } else {
-      router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
+      router.push(selectedTripId ? (`/(tabs)/trips/${selectedTripId}/itinerary` as any) : ('/' as any));
     }
   };
 
@@ -229,6 +285,12 @@ export default function AddFlightScreen() {
       return;
     }
 
+    if (!selectedTripId) {
+      Alert.alert('No Trip Selected', 'Please select or create a trip first.');
+      setErrors((prev) => ({ ...prev, submit: 'Please select or create a trip first.' }));
+      return;
+    }
+
     if (!validate()) return;
     setIsSubmitting(true);
     setErrors((prev) => ({ ...prev, submit: '' }));
@@ -251,6 +313,10 @@ export default function AddFlightScreen() {
           location: `${departureAirport} (${departureCode}) → ${arrivalAirport} (${arrivalCode})`,
           confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
           notes: notes.trim() || undefined,
+          latitude: typeof departureLat === 'number' ? departureLat : null,
+          longitude: typeof departureLng === 'number' ? departureLng : null,
+          endLatitude: typeof arrivalLat === 'number' ? arrivalLat : null,
+          endLongitude: typeof arrivalLng === 'number' ? arrivalLng : null,
           metadata: {
             ...flightMeta,
             airline: airline.trim(),
@@ -267,7 +333,7 @@ export default function AddFlightScreen() {
         });
       } else {
         await addItem({
-          tripId: effectiveTripId,
+          tripId: selectedTripId,
           type: 'flight',
           title: `Flight to ${arrivalCode || arrivalAirport} (${flightNumber.toUpperCase()})`,
           startDateTime: startIso,
@@ -275,6 +341,10 @@ export default function AddFlightScreen() {
           location: `${departureAirport} (${departureCode}) → ${arrivalAirport} (${arrivalCode})`,
           confirmationNumber: confirmationNumber.trim().toUpperCase() || undefined,
           notes: notes.trim() || undefined,
+          latitude: typeof departureLat === 'number' ? departureLat : undefined,
+          longitude: typeof departureLng === 'number' ? departureLng : undefined,
+          endLatitude: typeof arrivalLat === 'number' ? arrivalLat : undefined,
+          endLongitude: typeof arrivalLng === 'number' ? arrivalLng : undefined,
           metadata: {
             airline: airline.trim(),
             flightNumber: flightNumber.trim().toUpperCase(),
@@ -294,7 +364,7 @@ export default function AddFlightScreen() {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.push(`/(tabs)/trips/${effectiveTripId}/itinerary` as any);
+        router.push(`/(tabs)/trips/${selectedTripId}/itinerary` as any);
       }
     } catch (e: any) {
       console.warn('Error saving flight:', e);
@@ -303,6 +373,7 @@ export default function AddFlightScreen() {
         ...prev,
         submit: e.message || 'Failed to save flight. Please check the details and try again.',
       }));
+      Alert.alert('Save Failed', e.message || 'Failed to save flight. Please check the details and try again.');
     }
   };
 
@@ -379,6 +450,53 @@ export default function AddFlightScreen() {
               <Text style={styles.errorBannerText}>{errors.submit}</Text>
             </View>
           ) : null}
+
+          {/* ── Trip Selector (if user has multiple trips or no trip passed) ── */}
+          {userTrips.length > 0 && !isEditMode && (
+            <View style={styles.section}>
+              <Text style={styles.inputLabel}>Trip</Text>
+              <Pressable
+                onPress={() => setShowTripDropdown((prev) => !prev)}
+                style={styles.selectTrigger}
+                accessibilityRole="button"
+                accessibilityLabel="Select trip"
+              >
+                <View style={styles.selectTriggerLeft}>
+                  <Text style={styles.selectTriggerText} numberOfLines={1}>
+                    {userTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
+                  </Text>
+                </View>
+                <Text style={styles.selectTriggerArrow}>▼</Text>
+              </Pressable>
+
+              {showTripDropdown && (
+                <View style={styles.dropdownMenu}>
+                  {userTrips.map((t) => (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => {
+                        setSelectedTripId(t.id);
+                        setShowTripDropdown(false);
+                      }}
+                      style={[
+                        styles.dropdownItem,
+                        selectedTripId === t.id && styles.dropdownItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedTripId === t.id && styles.dropdownItemTextActive,
+                        ]}
+                      >
+                        {t.title}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* ── 2. Flight Basics Section ─────────────────────────────────── */}
           <View style={styles.section}>
@@ -483,6 +601,21 @@ export default function AddFlightScreen() {
                     <Text style={styles.iataBadgeText}>{departureCode}</Text>
                   </View>
                 </View>
+                <LocationPickerField
+                  value={departureAirport}
+                  onChangeText={handleDepartureChange}
+                  placeholder="Pin origin on map"
+                  coordinates={typeof departureLat === 'number' && typeof departureLng === 'number' ? { latitude: departureLat, longitude: departureLng } : null}
+                  onSelectLocation={({ latitude: lat, longitude: lng }) => {
+                    setDepartureLat(lat);
+                    setDepartureLng(lng);
+                  }}
+                  onClearCoordinates={() => {
+                    setDepartureLat(undefined);
+                    setDepartureLng(undefined);
+                  }}
+                  testID="flight-departure-location-picker"
+                />
                 {errors.departureAirport ? (
                   <Text style={styles.errorText}>{errors.departureAirport}</Text>
                 ) : null}
@@ -531,6 +664,21 @@ export default function AddFlightScreen() {
                     <Text style={styles.iataBadgeText}>{arrivalCode}</Text>
                   </View>
                 </View>
+                <LocationPickerField
+                  value={arrivalAirport}
+                  onChangeText={handleArrivalChange}
+                  placeholder="Pin destination on map"
+                  coordinates={typeof arrivalLat === 'number' && typeof arrivalLng === 'number' ? { latitude: arrivalLat, longitude: arrivalLng } : null}
+                  onSelectLocation={({ latitude: lat, longitude: lng }) => {
+                    setArrivalLat(lat);
+                    setArrivalLng(lng);
+                  }}
+                  onClearCoordinates={() => {
+                    setArrivalLat(undefined);
+                    setArrivalLng(undefined);
+                  }}
+                  testID="flight-arrival-location-picker"
+                />
                 {errors.arrivalAirport ? (
                   <Text style={styles.errorText}>{errors.arrivalAirport}</Text>
                 ) : null}
@@ -1398,5 +1546,57 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.error,
     textAlign: 'center',
+  },
+  selectTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    paddingHorizontal: spacing.md,
+    height: 48,
+    marginTop: spacing.xs,
+  },
+  selectTriggerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  selectTriggerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  selectTriggerArrow: {
+    fontSize: 10,
+    color: colors.textSecondary,
+  },
+  dropdownMenu: {
+    marginTop: spacing.xs,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.input,
+    overflow: 'hidden',
+    ...shadows.sheet,
+  },
+  dropdownItem: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemActive: {
+    backgroundColor: 'rgba(44, 95, 94, 0.08)',
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  dropdownItemTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
   },
 });

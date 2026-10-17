@@ -57,8 +57,13 @@ export interface UpdateTripInput {
 // ---------------------------------------------------------------------------
 
 let cachedTrips: Trip[] | null = null;
+let currentActiveTripId: string | null = null;
+
 type TripsListener = (trips: Trip[]) => void;
+type ActiveTripListener = (tripId: string | null) => void;
+
 const listeners = new Set<TripsListener>();
+const activeTripListeners = new Set<ActiveTripListener>();
 
 function notifyListeners() {
   const current = cachedTrips ? [...cachedTrips] : [];
@@ -67,6 +72,16 @@ function notifyListeners() {
       listener(current);
     } catch (err) {
       console.warn('[Voyaro Trips] Listener notification error:', err);
+    }
+  });
+}
+
+function notifyActiveTripListeners() {
+  activeTripListeners.forEach((listener) => {
+    try {
+      listener(currentActiveTripId);
+    } catch (err) {
+      console.warn('[Voyaro Trips] Active trip listener error:', err);
     }
   });
 }
@@ -89,9 +104,34 @@ export function getCachedTrips(): Trip[] | null {
   return cachedTrips ? [...cachedTrips] : null;
 }
 
+export function setActiveTripId(tripId: string | null): void {
+  if (currentActiveTripId !== tripId) {
+    currentActiveTripId = tripId;
+    notifyActiveTripListeners();
+  }
+}
+
+export function getActiveTripId(): string | null {
+  return currentActiveTripId;
+}
+
+export function subscribeToActiveTrip(listener: ActiveTripListener): () => void {
+  activeTripListeners.add(listener);
+  try {
+    listener(currentActiveTripId);
+  } catch (err) {
+    console.warn('[Voyaro Trips] Initial active trip listener error:', err);
+  }
+  return () => {
+    activeTripListeners.delete(listener);
+  };
+}
+
 export function clearTripsCache(): void {
   cachedTrips = null;
+  currentActiveTripId = null;
   notifyListeners();
+  notifyActiveTripListeners();
 }
 
 // ---------------------------------------------------------------------------

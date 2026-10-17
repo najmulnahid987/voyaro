@@ -48,7 +48,7 @@ function formatDisplayTime(date: Date): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-interface DateTimePickerFieldProps {
+export interface DateTimePickerFieldProps {
   mode: 'date' | 'time';
   value: Date;
   onChange: (date: Date) => void;

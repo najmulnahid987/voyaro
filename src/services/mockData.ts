@@ -390,40 +390,45 @@ export function getAllTrips(): Trip[] {
   return MOCK_TRIPS;
 }
 
+export function isDevMockTrip(id?: string): boolean {
+  return Boolean(id === 'demo-trip' || id === 'japan-adventure');
+}
+
 /**
  * Find trip by id
  */
-export function getTripById(id: string): Trip | undefined {
+export function getTripById(id?: string): Trip | undefined {
+  if (!id) return undefined;
   if (id === 'demo-trip' || id === 'japan-adventure') {
     return MOCK_CURRENT_TRIP;
   }
-  return MOCK_TRIPS.find((t) => t.id === id) || MOCK_CURRENT_TRIP;
+  return MOCK_TRIPS.find((t) => t.id === id);
 }
 
 /**
  * Get travelers for a given trip
  */
 export function getTripTravelers(tripId?: string): Traveler[] {
-  const trip = tripId ? getTripById(tripId) : MOCK_CURRENT_TRIP;
-  return trip?.travelers || MOCK_TRAVELERS;
+  if (!tripId) return [];
+  const trip = getTripById(tripId);
+  return trip?.travelers || [];
 }
 
 /**
  * Get itinerary items for a given trip
  */
 export function getTripItinerary(tripId?: string): ItineraryItem[] {
-  const trip = tripId ? getTripById(tripId) : MOCK_CURRENT_TRIP;
-  return trip?.itinerary || MOCK_ITINERARY_ITEMS;
+  if (!tripId) return [];
+  const trip = getTripById(tripId);
+  return trip?.itinerary || [];
 }
 
 /**
  * Find itinerary item by id
  */
 export function getItineraryItemById(itemId: string): ItineraryItem | undefined {
-  return (
-    MOCK_ITINERARY_ITEMS.find((item) => item.id === itemId) ||
-    MOCK_ITINERARY_ITEMS[0]
-  );
+  if (!itemId) return undefined;
+  return MOCK_ITINERARY_ITEMS.find((item) => item.id === itemId);
 }
 
 /**

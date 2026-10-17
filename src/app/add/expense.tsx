@@ -41,10 +41,11 @@ import {
   deleteExpense,
   fetchExpenseById,
   getExpenseById,
+  isDevMockTrip,
   updateExpense,
 } from '@/services/expenseStore';
-import { getAllTrips, getTripById, getTripTravelers, Traveler } from '@/services/mockData';
-import { getCachedTrips } from '@/services/trip';
+import { getTripById, getTripTravelers, Traveler, Trip } from '@/services/mockData';
+import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
 import { listTripMembers, fetchUserTripRole } from '@/services/collaboration';
 import { Button } from '@/components/ui';
 import {
@@ -102,32 +103,61 @@ export default function AddExpenseScreen() {
   const insets = useSafeAreaInsets();
 
   // 1. Resolve Trip Reference
-  const allTrips = getAllTrips();
-  const cachedTrips = getCachedTrips() || [];
-  const rawTripId = tripId || 'japan-adventure';
-  const effectiveTripId =
-    rawTripId && (cachedTrips.some((t) => t.id === rawTripId) || allTrips.some((t) => t.id === rawTripId))
-      ? rawTripId
-      : rawTripId || 'japan-adventure';
-  const trip =
-    cachedTrips.find((t) => t.id === effectiveTripId) ||
-    getTripById(effectiveTripId) ||
-    cachedTrips[0] ||
-    allTrips[0];
-  const [tripTravelers, setTripTravelers] = useState<Traveler[]>(() => getTripTravelers(effectiveTripId));
+  const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
+  const [selectedTripId, setSelectedTripId] = useState<string>(() => {
+    if (tripId) return tripId;
+    const globalActive = getActiveTripId();
+    if (globalActive) return globalActive;
+    const cached = getCachedTrips();
+    return cached && cached.length > 0 ? cached[0].id : '';
+  });
+  const [tripTravelers, setTripTravelers] = useState<Traveler[]>(() =>
+    selectedTripId && isDevMockTrip(selectedTripId) ? getTripTravelers(selectedTripId) : []
+  );
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
 
   useEffect(() => {
     let isMounted = true;
+    async function loadTrips() {
+      try {
+        const fetched = await listTrips();
+        if (!isMounted) return;
+        setUserTrips(fetched);
+        if (!selectedTripId && fetched.length > 0) {
+          const globalActive = getActiveTripId();
+          const match = globalActive && fetched.some((t) => t.id === globalActive);
+          setSelectedTripId(tripId || (match ? globalActive : fetched[0].id));
+        }
+      } catch (err) {
+        console.warn('[AddExpense] Error loading trips:', err);
+      }
+    }
+    loadTrips();
+    return () => {
+      isMounted = false;
+    };
+  }, [tripId, selectedTripId]);
+
+  useEffect(() => {
+    let isMounted = true;
     async function loadMembers() {
+      if (!selectedTripId) {
+        setTripTravelers([]);
+        setUserRole(null);
+        return;
+      }
       try {
         const [members, role] = await Promise.all([
-          listTripMembers(effectiveTripId),
-          fetchUserTripRole(effectiveTripId),
+          listTripMembers(selectedTripId),
+          fetchUserTripRole(selectedTripId),
         ]);
         if (!isMounted) return;
         if (members && members.length > 0) {
           setTripTravelers(members);
+        } else if (isDevMockTrip(selectedTripId)) {
+          setTripTravelers(getTripTravelers(selectedTripId));
+        } else {
+          setTripTravelers([]);
         }
         setUserRole(role);
       } catch (err) {
@@ -138,7 +168,7 @@ export default function AddExpenseScreen() {
     return () => {
       isMounted = false;
     };
-  }, [effectiveTripId]);
+  }, [selectedTripId]);
 
   // 2. Resolve Existing Item if Edit Mode
   const existingExpense = useMemo(() => {
@@ -146,10 +176,23 @@ export default function AddExpenseScreen() {
   }, [expenseId]);
   const isEditMode = Boolean(expenseId);
 
+  useEffect(() => {
+    if (existingExpense?.tripId && existingExpense.tripId !== selectedTripId) {
+      setSelectedTripId(existingExpense.tripId);
+    }
+  }, [existingExpense, selectedTripId]);
+
+  const trip = useMemo(() => {
+    if (!selectedTripId) return null;
+    return (
+      userTrips.find((t) => t.id === selectedTripId) ||
+      getCachedTrips()?.find((t) => t.id === selectedTripId) ||
+      (isDevMockTrip(selectedTripId) ? getTripById(selectedTripId) : null) ||
+      null
+    );
+  }, [selectedTripId, userTrips]);
+
   // 3. Form State
-  const [selectedTripId, setSelectedTripId] = useState<string>(
-    () => existingExpense?.tripId || effectiveTripId
-  );
   const [title, setTitle] = useState<string>(
     () => existingExpense?.title || ''
   );
@@ -281,6 +324,12 @@ export default function AddExpenseScreen() {
       newErrors.date = dateVal.error || 'Please enter a valid calendar date.';
     }
 
+    if (!selectedTripId) {
+      setErrors({ form: 'Please select a trip to record this expense.' });
+      Alert.alert('No Trip Selected', 'Please select or create a trip first.');
+      return;
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -325,6 +374,7 @@ export default function AddExpenseScreen() {
     } catch (err: any) {
       console.warn('Error saving expense:', err);
       setErrors({ form: err.message || 'Failed to save expense.' });
+      Alert.alert('Save Failed', err.message || 'Failed to save expense. Please try again.');
       setIsSubmitting(false);
     }
   };
@@ -397,8 +447,16 @@ export default function AddExpenseScreen() {
             </View>
           ) : null}
 
+          {!trip && userTrips.length === 0 && (
+            <View style={styles.formErrorBox}>
+              <Text style={styles.formErrorText}>
+                No trips found. Please create a trip first before recording expenses.
+              </Text>
+            </View>
+          )}
+
           {/* ── 2. Trip Selector (Shown when editing or multiple trips) ─── */}
-          {allTrips.length > 1 && (
+          {userTrips.length > 1 && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Trip</Text>
               <View style={styles.cardContainer}>
@@ -416,7 +474,7 @@ export default function AddExpenseScreen() {
                       contentFit="contain"
                     />
                     <Text style={styles.selectTriggerText} numberOfLines={1}>
-                      {allTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
+                      {userTrips.find((t) => t.id === selectedTripId)?.title || trip?.title || 'Select Trip'}
                     </Text>
                   </View>
                   <Text style={styles.selectTriggerArrow}>▼</Text>
@@ -424,7 +482,7 @@ export default function AddExpenseScreen() {
 
                 {showTripDropdown && (
                   <View style={styles.dropdownMenu}>
-                    {allTrips.map((t) => (
+                    {userTrips.map((t) => (
                       <Pressable
                         key={t.id}
                         onPress={() => {

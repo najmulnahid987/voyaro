@@ -44,9 +44,10 @@ import {
 } from '@/utils/itineraryDateUtils';
 import { Button, Card } from '@/components/ui';
 import { fetchUserTripRole } from '@/services/collaboration';
+import { canGetDirections, openDestinationDirections } from '@/utils/mapDirections';
 
 export default function ItineraryItemDetailScreen() {
-  const { itemId } = useLocalSearchParams<{ itemId: string }>();
+  const { itemId, tripId } = useLocalSearchParams<{ itemId: string; tripId?: string }>();
   const insets = useSafeAreaInsets();
 
   // 1. Reactive item state from store
@@ -57,11 +58,13 @@ export default function ItineraryItemDetailScreen() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
 
+  const effectiveTripId = item?.tripId || tripId;
+
   useEffect(() => {
-    if (item?.tripId) {
-      fetchUserTripRole(item.tripId).then((r) => setUserRole(r));
+    if (effectiveTripId) {
+      fetchUserTripRole(effectiveTripId).then((r) => setUserRole(r));
     }
-  }, [item?.tripId]);
+  }, [effectiveTripId]);
 
   // ---------------------------------------------------------------------------
   // Navigation Handlers
@@ -69,6 +72,8 @@ export default function ItineraryItemDetailScreen() {
   const handleBack = () => {
     if (router.canGoBack()) {
       router.back();
+    } else if (effectiveTripId) {
+      router.push(`/(tabs)/trips/${effectiveTripId}/map` as any);
     } else {
       router.push('/(tabs)/trips');
     }
@@ -78,7 +83,7 @@ export default function ItineraryItemDetailScreen() {
     if (!item) return;
     router.push({
       pathname: `/add/${item.type}` as any,
-      params: { itemId: item.id, tripId: item.tripId },
+      params: { itemId: item.id, tripId: effectiveTripId },
     });
   };
 
@@ -88,7 +93,7 @@ export default function ItineraryItemDetailScreen() {
 
   const handleConfirmDelete = async () => {
     if (!item || !itemId || isDeleting) return;
-    const targetTripId = item.tripId || 'japan-adventure';
+    const targetTripId = effectiveTripId || 'japan-adventure';
     setIsDeleting(true);
     try {
       await deleteItem(itemId);
@@ -279,20 +284,22 @@ export default function ItineraryItemDetailScreen() {
         ) : null}
 
         {/* ── 4. Bottom Actions ────────────────────────────────────────── */}
-        <View style={styles.actionRowContainer}>
-          <Button
-            label="Edit Reservation"
-            variant="outline"
-            onPress={handleEditPress}
-            style={styles.actionButton}
-          />
-          <Button
-            label="Delete"
-            variant="destructive"
-            onPress={handleDeletePress}
-            style={styles.actionButton}
-          />
-        </View>
+        {userRole !== 'viewer' && (
+          <View style={styles.actionRowContainer}>
+            <Button
+              label="Edit Reservation"
+              variant="outline"
+              onPress={handleEditPress}
+              style={styles.actionButton}
+            />
+            <Button
+              label="Delete"
+              variant="destructive"
+              onPress={handleDeletePress}
+              style={styles.actionButton}
+            />
+          </View>
+        )}
       </ScrollView>
 
       {/* ── 5. Delete Confirmation Dialog ──────────────────────────────── */}
@@ -416,6 +423,40 @@ function HeroSummaryCard({
         />
         <Text style={styles.heroDateTimeText}>{dateDisplay}</Text>
       </View>
+
+      {/* External Destination Directions Action */}
+      {canGetDirections({
+        latitude: item.latitude,
+        longitude: item.longitude,
+        address: item.location,
+      }) ? (
+        <View style={styles.heroDirectionsRow}>
+          <Pressable
+            onPress={() =>
+              openDestinationDirections({
+                latitude: item.latitude,
+                longitude: item.longitude,
+                address: item.location,
+                label: item.title,
+              })
+            }
+            style={({ pressed }) => [
+              styles.heroDirectionsButton,
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Get directions to ${item.title} in external maps`}
+          >
+            <Image
+              source={require('@/assets/images/icons/location-pin.svg')}
+              style={styles.heroDirectionsIcon}
+              tintColor={colors.primary}
+              contentFit="contain"
+            />
+            <Text style={styles.heroDirectionsText}>Get Directions in Maps ↗</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </Card>
   );
 }
@@ -480,6 +521,82 @@ function FlightDetailView({
             <Text style={styles.scheduleDate}>{arrDate || depDate}</Text>
           </View>
         </View>
+
+        {/* Airport External Directions Actions */}
+        {(canGetDirections({
+          latitude: item.latitude,
+          longitude: item.longitude,
+          address: meta.departureAirport ? `${meta.departureAirport} Airport` : meta.departureCity,
+        }) ||
+          canGetDirections({
+            latitude: item.endLatitude,
+            longitude: item.endLongitude,
+            address: meta.arrivalAirport ? `${meta.arrivalAirport} Airport` : meta.arrivalCity,
+          })) && (
+          <View style={styles.transportRouteActionsRow}>
+            {canGetDirections({
+              latitude: item.latitude,
+              longitude: item.longitude,
+              address: meta.departureAirport ? `${meta.departureAirport} Airport` : meta.departureCity,
+            }) && (
+              <Pressable
+                onPress={() =>
+                  openDestinationDirections({
+                    latitude: item.latitude,
+                    longitude: item.longitude,
+                    address: meta.departureAirport ? `${meta.departureAirport} Airport` : meta.departureCity,
+                    label: meta.departureAirport || 'Departure Airport',
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.transportDirectionPill,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Get directions to departure airport in maps"
+              >
+                <Image
+                  source={require('@/assets/images/icons/location-pin.svg')}
+                  style={styles.transportDirectionPillIcon}
+                  tintColor={colors.primary}
+                  contentFit="contain"
+                />
+                <Text style={styles.transportDirectionPillText}>Directions to Departure Airport ↗</Text>
+              </Pressable>
+            )}
+
+            {canGetDirections({
+              latitude: item.endLatitude,
+              longitude: item.endLongitude,
+              address: meta.arrivalAirport ? `${meta.arrivalAirport} Airport` : meta.arrivalCity,
+            }) && (
+              <Pressable
+                onPress={() =>
+                  openDestinationDirections({
+                    latitude: item.endLatitude,
+                    longitude: item.endLongitude,
+                    address: meta.arrivalAirport ? `${meta.arrivalAirport} Airport` : meta.arrivalCity,
+                    label: meta.arrivalAirport || 'Arrival Airport',
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.transportDirectionPill,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Get directions to arrival airport in maps"
+              >
+                <Image
+                  source={require('@/assets/images/icons/location-pin.svg')}
+                  style={styles.transportDirectionPillIcon}
+                  tintColor={colors.primary}
+                  contentFit="contain"
+                />
+                <Text style={styles.transportDirectionPillText}>Directions to Arrival Airport ↗</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </Card>
 
       {/* Flight Specs Grid */}
@@ -562,6 +679,37 @@ function HotelDetailView({
             </Text>
           </View>
         </View>
+
+        {canGetDirections({
+          latitude: item.latitude,
+          longitude: item.longitude,
+          address: meta.address || item.location,
+        }) && (
+          <Pressable
+            onPress={() =>
+              openDestinationDirections({
+                latitude: item.latitude,
+                longitude: item.longitude,
+                address: meta.address || item.location,
+                label: meta.hotelName || item.title,
+              })
+            }
+            style={({ pressed }) => [
+              styles.sectionDirectionsButton,
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Get directions to ${meta.hotelName || item.title} in maps`}
+          >
+            <Image
+              source={require('@/assets/images/icons/location-pin.svg')}
+              style={styles.sectionDirectionsIcon}
+              tintColor={colors.primary}
+              contentFit="contain"
+            />
+            <Text style={styles.sectionDirectionsText}>Get Directions to Hotel ↗</Text>
+          </Pressable>
+        )}
       </Card>
 
       {/* Check-In / Check-Out Grid */}
@@ -643,10 +791,41 @@ function ActivityDetailView({
           <View style={styles.activityTitleBlock}>
             <Text style={styles.activityNameText}>{item.title}</Text>
             <Text style={styles.activityLocationText}>
-              {item.location || 'Location details in confirmation'}
+              {meta.meetingPoint || item.location || 'Location details in confirmation'}
             </Text>
           </View>
         </View>
+
+        {canGetDirections({
+          latitude: item.latitude,
+          longitude: item.longitude,
+          address: meta.meetingPoint || item.location,
+        }) && (
+          <Pressable
+            onPress={() =>
+              openDestinationDirections({
+                latitude: item.latitude,
+                longitude: item.longitude,
+                address: meta.meetingPoint || item.location,
+                label: item.title,
+              })
+            }
+            style={({ pressed }) => [
+              styles.sectionDirectionsButton,
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel={`Get directions to ${item.title} in maps`}
+          >
+            <Image
+              source={require('@/assets/images/icons/location-pin.svg')}
+              style={styles.sectionDirectionsIcon}
+              tintColor={colors.primary}
+              contentFit="contain"
+            />
+            <Text style={styles.sectionDirectionsText}>Get Directions to Activity ↗</Text>
+          </Pressable>
+        )}
       </Card>
 
       {/* Info Specs Grid */}
@@ -765,6 +944,82 @@ function TransportationDetailView({
             </View>
           </View>
         </View>
+
+        {/* External Directions for Departure and Arrival Stations */}
+        {(canGetDirections({
+          latitude: item.latitude,
+          longitude: item.longitude,
+          address: meta.from || item.location?.split('→')[0]?.trim(),
+        }) ||
+          canGetDirections({
+            latitude: item.endLatitude,
+            longitude: item.endLongitude,
+            address: meta.to || item.location?.split('→')[1]?.trim(),
+          })) && (
+          <View style={styles.transportRouteActionsRow}>
+            {canGetDirections({
+              latitude: item.latitude,
+              longitude: item.longitude,
+              address: meta.from || item.location?.split('→')[0]?.trim(),
+            }) && (
+              <Pressable
+                onPress={() =>
+                  openDestinationDirections({
+                    latitude: item.latitude,
+                    longitude: item.longitude,
+                    address: meta.from || item.location?.split('→')[0]?.trim(),
+                    label: meta.from ? `${meta.from} (Departure)` : `${item.title} Departure`,
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.transportDirectionPill,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Get directions to departure station in maps"
+              >
+                <Image
+                  source={require('@/assets/images/icons/location-pin.svg')}
+                  style={styles.transportDirectionPillIcon}
+                  tintColor={colors.primary}
+                  contentFit="contain"
+                />
+                <Text style={styles.transportDirectionPillText}>Directions to Departure ↗</Text>
+              </Pressable>
+            )}
+
+            {canGetDirections({
+              latitude: item.endLatitude,
+              longitude: item.endLongitude,
+              address: meta.to || item.location?.split('→')[1]?.trim(),
+            }) && (
+              <Pressable
+                onPress={() =>
+                  openDestinationDirections({
+                    latitude: item.endLatitude,
+                    longitude: item.endLongitude,
+                    address: meta.to || item.location?.split('→')[1]?.trim(),
+                    label: meta.to ? `${meta.to} (Arrival)` : `${item.title} Arrival`,
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.transportDirectionPill,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Get directions to arrival station in maps"
+              >
+                <Image
+                  source={require('@/assets/images/icons/location-pin.svg')}
+                  style={styles.transportDirectionPillIcon}
+                  tintColor={colors.primary}
+                  contentFit="contain"
+                />
+                <Text style={styles.transportDirectionPillText}>Directions to Arrival ↗</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
       </Card>
 
       {/* Transport Specs Grid */}
@@ -1503,5 +1758,79 @@ const styles = StyleSheet.create({
   },
   dialogConfirmButton: {
     flex: 1,
+  },
+
+  // ── Destination Directions Styles ───────────────────────────────────────
+  heroDirectionsRow: {
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(44, 95, 94, 0.08)',
+  },
+  heroDirectionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primarySurface,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.button,
+  },
+  heroDirectionsIcon: {
+    width: 14,
+    height: 14,
+  },
+  heroDirectionsText: {
+    ...typography.label,
+    fontFamily: fontFamily.semiBold,
+    color: colors.primary,
+    fontSize: 13,
+  },
+  sectionDirectionsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+    alignSelf: 'flex-start',
+  },
+  sectionDirectionsIcon: {
+    width: 13,
+    height: 13,
+  },
+  sectionDirectionsText: {
+    ...typography.caption,
+    fontFamily: fontFamily.semiBold,
+    color: colors.primary,
+    fontSize: 12,
+  },
+  transportRouteActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(44, 95, 94, 0.08)',
+  },
+  transportDirectionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.primarySurface,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+  },
+  transportDirectionPillIcon: {
+    width: 11,
+    height: 11,
+  },
+  transportDirectionPillText: {
+    ...typography.caption,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    color: colors.primary,
   },
 });

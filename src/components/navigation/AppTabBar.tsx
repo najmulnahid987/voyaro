@@ -1,10 +1,12 @@
 import React, { ComponentProps } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Tabs, router } from 'expo-router';
+import { Tabs, router, useGlobalSearchParams, usePathname } from 'expo-router';
 import { colors, radius, shadows } from '@/theme';
 import { useShellInsets, BOTTOM_BAR_HEIGHT } from './useShellInsets';
 import { TabBarItem, TabKey } from './TabBarItem';
 import { AddActionButton } from './AddActionButton';
+
+import { getActiveTripId, getCachedTrips } from '@/services/trip';
 
 export type AppTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -28,6 +30,8 @@ const tabLabelMap: Record<string, string> = {
  */
 export function AppTabBar({ state, descriptors, navigation }: AppTabBarProps) {
   const { bottomOffset } = useShellInsets();
+  const globalParams = useGlobalSearchParams<{ tripId?: string }>();
+  const pathname = usePathname();
 
   const handleTabPress = (route: { key: string; name: string }, isFocused: boolean) => {
     const event = navigation.emit({
@@ -42,7 +46,33 @@ export function AppTabBar({ state, descriptors, navigation }: AppTabBarProps) {
   };
 
   const handleAddPress = () => {
-    router.push('/add');
+    let activeTripId = globalParams?.tripId;
+    if (!activeTripId && pathname) {
+      const match = pathname.match(/\/trips\/([^/?#]+)/);
+      if (match && match[1] && match[1] !== 'create') {
+        activeTripId = match[1];
+      }
+    }
+    if (!activeTripId) {
+      activeTripId = getActiveTripId() || undefined;
+    }
+    if (!activeTripId) {
+      const cached = getCachedTrips();
+      if (cached && cached.length > 0) {
+        const ongoing = cached.find((t) => t.status === 'ongoing' || t.status === 'current');
+        const upcoming = cached.find((t) => t.status === 'upcoming');
+        activeTripId = ongoing?.id || upcoming?.id || cached[0].id;
+      }
+    }
+
+    if (activeTripId) {
+      router.push({
+        pathname: '/add',
+        params: { tripId: activeTripId },
+      });
+    } else {
+      router.push('/add');
+    }
   };
 
   return (

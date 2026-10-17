@@ -132,10 +132,10 @@ export interface ItineraryItem<T = AnyItineraryMetadata> {
   location?: string;
   notes?: string;
   confirmationNumber?: string;
-  latitude?: number;
-  longitude?: number;
-  endLatitude?: number;
-  endLongitude?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  endLatitude?: number | null;
+  endLongitude?: number | null;
   metadata: T;
 }
 

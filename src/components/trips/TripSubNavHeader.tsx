@@ -28,7 +28,8 @@ import {
 import { Image } from 'expo-image';
 import { router, usePathname } from 'expo-router';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { getTripById } from '@/services/mockData';
+import { getTripById, isDevMockTrip } from '@/services/mockData';
+import { getActiveTripId, getCachedTrips } from '@/services/trip';
 
 export type TripSubNavTabKey =
   | 'overview'
@@ -92,11 +93,16 @@ export function TripSubNavHeader({
   onTabPress,
 }: TripSubNavHeaderProps) {
   const pathname = usePathname();
-  const effectiveTripId = tripId || 'japan-adventure';
+  const effectiveTripId = tripId || getActiveTripId() || '';
 
   // 1. Resolve trip data for title
   const trip = useMemo(() => {
-    return getTripById(effectiveTripId) || getTripById('japan-adventure')!;
+    if (!effectiveTripId) return null;
+    return (
+      getCachedTrips()?.find((t) => t.id === effectiveTripId) ||
+      (isDevMockTrip(effectiveTripId) ? getTripById(effectiveTripId) : null) ||
+      null
+    );
   }, [effectiveTripId]);
 
   const displayTitle = propTitle || trip?.title || 'Trip Details';
@@ -132,15 +138,23 @@ export function TripSubNavHeader({
     }
     // Context-aware add trigger based on active tab
     if (currentTab === 'expenses') {
-      router.push({
-        pathname: '/add/expense',
-        params: { tripId: effectiveTripId },
-      });
+      if (effectiveTripId) {
+        router.push({
+          pathname: '/add/expense',
+          params: { tripId: effectiveTripId },
+        });
+      } else {
+        router.push('/add/expense');
+      }
     } else {
-      router.push({
-        pathname: '/add',
-        params: { tripId: effectiveTripId },
-      });
+      if (effectiveTripId) {
+        router.push({
+          pathname: '/add',
+          params: { tripId: effectiveTripId },
+        });
+      } else {
+        router.push('/add');
+      }
     }
   };
 

@@ -5,7 +5,7 @@
  * Hotel Vouchers, Rail Passes, Insurance) under the persistent TripSubNavHeader.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -17,7 +17,7 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { getTripById } from '@/services/mockData';
+import { getActiveTripId, setActiveTripId } from '@/services/trip';
 import { useShellInsets } from '@/components/navigation';
 
 type DocCategory = 'all' | 'flights' | 'hotels' | 'passports' | 'insurance';
@@ -88,9 +88,14 @@ const TRIP_DOCUMENTS: TripDoc[] = [
 
 export default function TripDocumentsScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
-  const effectiveTripId = tripId || 'japan-adventure';
-  const trip = getTripById(effectiveTripId) || getTripById('japan-adventure')!;
+  const effectiveTripId = tripId || getActiveTripId() || '';
   const { contentPaddingBottom } = useShellInsets();
+
+  useEffect(() => {
+    if (effectiveTripId) {
+      setActiveTripId(effectiveTripId);
+    }
+  }, [effectiveTripId]);
 
   const [activeCategory, setActiveCategory] = useState<DocCategory>('all');
 
