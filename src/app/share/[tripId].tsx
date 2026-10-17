@@ -27,6 +27,7 @@ import {
   updateMemberRole,
   removeMember,
   getInvitationUrl,
+  getTripShareUrl,
   subscribeToTripCollaboration,
 } from '@/services/collaboration';
 import { Traveler, Trip } from '@/services/mockData';
@@ -102,7 +103,7 @@ export default function ShareTripScreen() {
   };
 
   const isOwner = trip?.isOwner !== false;
-  const shareLink = `voyaro://trip/${tripId}`;
+  const shareLink = getTripShareUrl(tripId || '');
 
   // ---------------------------------------------------------------------------
   // Action Handlers
@@ -124,6 +125,7 @@ export default function ShareTripScreen() {
       await Share.share({
         title: trip?.title || 'Voyaro Trip',
         message: `Join my trip "${trip?.title || 'Trip'}" to ${trip?.destination || 'Destination'} on Voyaro!\n${shareLink}`,
+        url: shareLink,
       });
     } catch (err) {
       console.warn('[ShareTripScreen] Share link error:', err);

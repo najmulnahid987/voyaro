@@ -7,7 +7,7 @@
 --   - Member role changes and member removal / leaving trip
 --   - Reactive subscriptions for real-time UI updates
 --*/
-
+import * as Linking from 'expo-linking';
 import { supabase } from './supabase';
 import {
   DomainTripInvitation,
@@ -256,12 +256,30 @@ export interface InvitationStatusResult {
  */
 export function getInvitationUrl(token: string): string {
   if (!token?.trim()) return '';
+  const cleanToken = encodeURIComponent(token.trim());
   // In Expo app, Linking.createURL generates the proper scheme (e.g. voyaro://invite/token)
   try {
-    const Linking = require('expo-linking');
-    return Linking.createURL(`/invite/${token.trim()}`);
+    return Linking.createURL(`/invite/${cleanToken}`);
   } catch {
-    return `voyaro://invite/${token.trim()}`;
+    return `voyaro://invite/${cleanToken}`;
+  }
+}
+
+/**
+ * Generates a direct deep link URL for an existing trip details screen.
+ * Matches the Expo Router dynamic route /(tabs)/trips/[tripId],
+ * whose public path is /trips/[tripId] (route groups like (tabs) are omitted from the URL path).
+ *
+ * In native builds with custom scheme 'voyaro', produces 'voyaro://trips/[tripId]'.
+ * In Expo Go development, produces 'exp://.../--/trips/[tripId]'.
+ */
+export function getTripShareUrl(tripId: string): string {
+  if (!tripId?.trim()) return '';
+  const cleanTripId = encodeURIComponent(tripId.trim());
+  try {
+    return Linking.createURL(`/trips/${cleanTripId}`);
+  } catch {
+    return `voyaro://trips/${cleanTripId}`;
   }
 }
 

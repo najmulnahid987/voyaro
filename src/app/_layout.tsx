@@ -64,6 +64,9 @@ function RootNavigator() {
           name="modal"
           options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
         />
+
+        {/* Legacy Trip Redirection */}
+        <Stack.Screen name="trip" />
       </Stack.Protected>
 
       {/* ── Dev-only ───────────────────────────────────────────────────── */}

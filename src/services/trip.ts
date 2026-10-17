@@ -18,7 +18,14 @@ import { TripRow, TripBudgetRow } from '@/types/database.types';
 import { mapTripRowToDomain, mapTripToInsert, mapTripToUpdate } from './mappers';
 import { CurrencyCode } from '@/types/expense';
 import { toMajorUnits, toMinorUnits, getCurrencyConfig } from '@/utils/currencyUtils';
-import { listTripMembers, fetchUserTripRole, subscribeToTripCollaboration } from './collaboration';
+import {
+  listTripMembers,
+  fetchUserTripRole,
+  subscribeToTripCollaboration,
+  getTripShareUrl,
+} from './collaboration';
+
+export { getTripShareUrl };
 
 // ---------------------------------------------------------------------------
 // 1. Types & Interfaces
@@ -246,6 +253,10 @@ export async function listTrips(): Promise<Trip[]> {
  * Respects RLS: returns null if the trip doesn't exist or user lacks membership.
  */
 export async function fetchTripById(tripId: string): Promise<Trip | null> {
+  if (!tripId || typeof tripId !== 'string' || !tripId.trim()) {
+    return null;
+  }
+
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
   if (userError || !user) {
@@ -255,10 +266,14 @@ export async function fetchTripById(tripId: string): Promise<Trip | null> {
   const { data: row, error } = await supabase
     .from('trips')
     .select('*, trip_budgets(*)')
-    .eq('id', tripId)
+    .eq('id', tripId.trim())
     .maybeSingle();
 
   if (error) {
+    // 22P02 is postgres error code for invalid input syntax (e.g. invalid UUID format)
+    if ((error as any).code === '22P02') {
+      return null;
+    }
     console.warn(`[Voyaro Trips] Error fetching trip ${tripId}:`, error.message);
     throw new Error(`Unable to fetch trip: ${error.message}`);
   }
