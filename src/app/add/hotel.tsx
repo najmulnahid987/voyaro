@@ -30,7 +30,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { addItem, fetchItineraryItemById, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
 import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
 import { Trip } from '@/services/mockData';
@@ -78,9 +78,9 @@ export default function AddHotelScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const insets = useSafeAreaInsets();
 
-  const existingItem = useMemo(() => {
+  const [existingItem, setExistingItem] = useState<ConcreteItineraryItem | undefined>(() => {
     return itemId ? getItem(itemId) : undefined;
-  }, [itemId]);
+  });
 
   const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
   const [selectedTripId, setSelectedTripId] = useState<string>(() => {
@@ -92,6 +92,30 @@ export default function AddHotelScreen() {
     return cached && cached.length > 0 ? cached[0].id : '';
   });
   const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  // Asynchronously load item for edit mode if not already in cache
+  useEffect(() => {
+    let isMounted = true;
+    if (itemId) {
+      const cached = getItem(itemId);
+      if (cached) {
+        setExistingItem(cached);
+      } else {
+        fetchItineraryItemById(itemId)
+          .then((fetched) => {
+            if (isMounted && fetched && fetched.type === 'hotel') {
+              setExistingItem(fetched);
+            }
+          })
+          .catch((err) => {
+            console.warn('[AddHotel] Error loading item for editing:', err);
+          });
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [itemId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -136,10 +160,10 @@ export default function AddHotelScreen() {
   // Form State
   // -------------------------------------------------------------------------
   const [hotelName, setHotelName] = useState(
-    () => hotelMeta?.hotelName || existingItem?.title || (isEditMode ? '' : 'The Ritz-Carlton, Tokyo')
+    () => hotelMeta?.hotelName || existingItem?.title || ''
   );
   const [address, setAddress] = useState(
-    () => hotelMeta?.address || existingItem?.location || (isEditMode ? '' : 'Tokyo Midtown, 9-7-1 Akasaka, Minato-ku, Tokyo')
+    () => hotelMeta?.address || existingItem?.location || ''
   );
   const [latitude, setLatitude] = useState<number | undefined>(
     () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
@@ -149,24 +173,48 @@ export default function AddHotelScreen() {
   );
 
   const [checkInObj, setCheckInObj] = useState<Date>(
-    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-11T15:00:00'))
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date())
   );
   const [checkOutObj, setCheckOutObj] = useState<Date>(
-    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date('2028-03-14T11:00:00'))
+    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date(Date.now() + 24 * 3600 * 1000))
   );
 
   const [confirmationNumber, setConfirmationNumber] = useState(
-    () => existingItem?.confirmationNumber || (isEditMode ? '' : 'RC-TYO-8841')
+    () => existingItem?.confirmationNumber || ''
   );
   const [room, setRoom] = useState(
-    () => hotelMeta?.room || hotelMeta?.roomType || (isEditMode ? '' : 'Club Deluxe King Room')
+    () => hotelMeta?.room || hotelMeta?.roomType || ''
   );
   const [guestName, setGuestName] = useState(
-    () => hotelMeta?.guestName || (isEditMode ? '' : 'Alex & Sarah Johnson')
+    () => hotelMeta?.guestName || ''
   );
   const [notes, setNotes] = useState(
-    () => existingItem?.notes || (isEditMode ? '' : 'High floor requested with Mount Fuji view. Early check-in noted.')
+    () => existingItem?.notes || ''
   );
+
+  // Synchronize form state when existing item loads
+  useEffect(() => {
+    if (existingItem && existingItem.type === 'hotel') {
+      const meta = existingItem.metadata as HotelMetadata;
+      if (existingItem.title || meta?.hotelName) setHotelName(meta?.hotelName || existingItem.title);
+      if (existingItem.location || meta?.address) setAddress(meta?.address || existingItem.location || '');
+      if (typeof existingItem.latitude === 'number') setLatitude(existingItem.latitude);
+      if (typeof existingItem.longitude === 'number') setLongitude(existingItem.longitude);
+      if (existingItem.startDateTime) {
+        const d = parseDate(existingItem.startDateTime);
+        if (d) setCheckInObj(d);
+      }
+      if (existingItem.endDateTime) {
+        const d = parseDate(existingItem.endDateTime);
+        if (d) setCheckOutObj(d);
+      }
+      if (existingItem.confirmationNumber) setConfirmationNumber(existingItem.confirmationNumber);
+      if (meta?.room || meta?.roomType) setRoom(meta.room || meta.roomType || '');
+      if (meta?.guestName) setGuestName(meta.guestName);
+      if (existingItem.notes) setNotes(existingItem.notes);
+      if (existingItem.tripId) setSelectedTripId(existingItem.tripId);
+    }
+  }, [existingItem]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -436,7 +484,7 @@ export default function AddHotelScreen() {
                       setHotelName(t);
                       if (errors.hotelName) setErrors((prev) => ({ ...prev, hotelName: '' }));
                     }}
-                    placeholder="e.g. Tokyo Central Hotel"
+                    placeholder="e.g. Grand Palace Hotel"
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>
@@ -451,7 +499,7 @@ export default function AddHotelScreen() {
                   label="Address & Map Location"
                   value={address}
                   onChangeText={setAddress}
-                  placeholder="e.g. 1-1-1 Marunouchi, Chiyoda-ku, Tokyo"
+                  placeholder="Enter hotel address or location"
                   coordinates={typeof latitude === 'number' && typeof longitude === 'number' ? { latitude, longitude } : null}
                   onSelectLocation={({ address: resolvedAddr, latitude: lat, longitude: lng }) => {
                     setLatitude(lat);
@@ -601,12 +649,12 @@ export default function AddHotelScreen() {
                 <View style={styles.previewHeaderRow}>
                   <View style={styles.previewTitleGroup}>
                     <Text style={styles.previewHotelTitle} numberOfLines={1}>
-                      {hotelName.trim() || 'Tokyo Central Hotel'}
+                      {hotelName.trim() || 'Accommodation Name'}
                     </Text>
                     <View style={styles.previewLocationRow}>
                       <Text style={styles.previewLocationIcon}>📍</Text>
                       <Text style={styles.previewLocationText} numberOfLines={1}>
-                        {address.trim() || 'Chiyoda, Tokyo'}
+                        {address.trim() || 'Location / Address'}
                       </Text>
                     </View>
                   </View>

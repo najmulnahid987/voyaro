@@ -29,7 +29,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { deleteItem, updateItem, useItineraryItem } from '@/services/itineraryStore';
+import { deleteItem, useItineraryItem } from '@/services/itineraryStore';
 import {
   ActivityMetadata,
   ConcreteItineraryItem,
@@ -38,7 +38,6 @@ import {
   TransportationMetadata,
 } from '@/types/itinerary';
 import {
-  formatDateRange,
   formatItineraryDate,
   formatItineraryTime,
 } from '@/utils/itineraryDateUtils';
@@ -93,12 +92,16 @@ export default function ItineraryItemDetailScreen() {
 
   const handleConfirmDelete = async () => {
     if (!item || !itemId || isDeleting) return;
-    const targetTripId = effectiveTripId || 'japan-adventure';
+    const targetTripId = effectiveTripId;
     setIsDeleting(true);
     try {
       await deleteItem(itemId);
       setShowDeleteConfirm(false);
-      router.replace(`/(tabs)/trips/${targetTripId}/itinerary` as any);
+      if (targetTripId) {
+        router.replace(`/(tabs)/trips/${targetTripId}/itinerary` as any);
+      } else {
+        router.replace('/(tabs)/trips' as any);
+      }
     } catch (err: any) {
       console.error('Failed to delete itinerary item:', err);
       setIsDeleting(false);

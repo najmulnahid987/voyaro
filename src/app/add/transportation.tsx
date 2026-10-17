@@ -31,7 +31,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { addItem, fetchItineraryItemById, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
 import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
 import { Trip } from '@/services/mockData';
@@ -116,9 +116,9 @@ export default function AddTransportationScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const insets = useSafeAreaInsets();
 
-  const existingItem = useMemo(() => {
+  const [existingItem, setExistingItem] = useState<ConcreteItineraryItem | undefined>(() => {
     return itemId ? getItem(itemId) : undefined;
-  }, [itemId]);
+  });
 
   const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
   const [selectedTripId, setSelectedTripId] = useState<string>(() => {
@@ -130,6 +130,30 @@ export default function AddTransportationScreen() {
     return cached && cached.length > 0 ? cached[0].id : '';
   });
   const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  // Asynchronously load item for edit mode if not already in cache
+  useEffect(() => {
+    let isMounted = true;
+    if (itemId) {
+      const cached = getItem(itemId);
+      if (cached) {
+        setExistingItem(cached);
+      } else {
+        fetchItineraryItemById(itemId)
+          .then((fetched) => {
+            if (isMounted && fetched && fetched.type === 'transportation') {
+              setExistingItem(fetched);
+            }
+          })
+          .catch((err) => {
+            console.warn('[AddTransportation] Error loading item for editing:', err);
+          });
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [itemId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -163,10 +187,10 @@ export default function AddTransportationScreen() {
     () => transMeta?.transportationType || 'train'
   );
   const [fromLocation, setFromLocation] = useState(
-    () => transMeta?.from || (isEditMode ? '' : 'Tokyo Station')
+    () => transMeta?.from || ''
   );
   const [toLocation, setToLocation] = useState(
-    () => transMeta?.to || (isEditMode ? '' : 'Kyoto Station')
+    () => transMeta?.to || ''
   );
   const [fromLat, setFromLat] = useState<number | undefined>(
     () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
@@ -181,17 +205,17 @@ export default function AddTransportationScreen() {
     () => (typeof existingItem?.endLongitude === 'number' ? existingItem.endLongitude : undefined)
   );
   const [providerRoute, setProviderRoute] = useState(
-    () => transMeta?.provider || (isEditMode ? '' : 'Tokaido Shinkansen')
+    () => transMeta?.provider || ''
   );
 
   const [dateObj, setDateObj] = useState<Date>(
-    () => existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T09:00:00')
+    () => existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date()
   );
   const [departureTimeObj, setDepartureTimeObj] = useState<Date>(
-    () => existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T09:00:00')
+    () => existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date()
   );
   const [arrivalTimeObj, setArrivalTimeObj] = useState<Date>(
-    () => existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date('2028-03-12T11:20:00')
+    () => existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date(Date.now() + 2 * 3600 * 1000)
   );
   const [isOvernight, setIsOvernight] = useState(() => {
     if (existingItem?.startDateTime && existingItem?.endDateTime) {
@@ -201,14 +225,49 @@ export default function AddTransportationScreen() {
   });
 
   const [bookingNumber, setBookingNumber] = useState(
-    () => transMeta?.bookingNumber || existingItem?.confirmationNumber || (isEditMode ? '' : 'JR-784920')
+    () => transMeta?.bookingNumber || existingItem?.confirmationNumber || ''
   );
   const [seat, setSeat] = useState(
-    () => transMeta?.seat || (isEditMode ? '' : 'Car 5, Seat 12-A')
+    () => transMeta?.seat || ''
   );
   const [notes, setNotes] = useState(
-    () => existingItem?.notes || (isEditMode ? '' : 'Mount Fuji view on the right side of the train (seats D/E). Luggage area reserved behind row 12.')
+    () => existingItem?.notes || ''
   );
+
+  // Synchronize form state when existing item loads
+  useEffect(() => {
+    if (existingItem && existingItem.type === 'transportation') {
+      const meta = existingItem.metadata as TransportationMetadata;
+      if (meta?.transportationType) setSelectedType(meta.transportationType);
+      if (meta?.from) setFromLocation(meta.from);
+      if (meta?.to) setToLocation(meta.to);
+      if (typeof existingItem.latitude === 'number') setFromLat(existingItem.latitude);
+      if (typeof existingItem.longitude === 'number') setFromLng(existingItem.longitude);
+      if (typeof existingItem.endLatitude === 'number') setToLat(existingItem.endLatitude);
+      if (typeof existingItem.endLongitude === 'number') setToLng(existingItem.endLongitude);
+      if (meta?.provider) setProviderRoute(meta.provider);
+      if (existingItem.startDateTime) {
+        const d = parseDate(existingItem.startDateTime);
+        if (d) {
+          setDateObj(d);
+          setDepartureTimeObj(d);
+        }
+      }
+      if (existingItem.endDateTime) {
+        const d = parseDate(existingItem.endDateTime);
+        if (d) setArrivalTimeObj(d);
+      }
+      if (existingItem.startDateTime && existingItem.endDateTime) {
+        setIsOvernight(isMultiDayItem(existingItem.startDateTime, existingItem.endDateTime));
+      }
+      if (meta?.bookingNumber || existingItem.confirmationNumber) {
+        setBookingNumber(meta?.bookingNumber || existingItem.confirmationNumber || '');
+      }
+      if (meta?.seat) setSeat(meta.seat);
+      if (existingItem.notes) setNotes(existingItem.notes);
+      if (existingItem.tripId) setSelectedTripId(existingItem.tripId);
+    }
+  }, [existingItem]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -551,7 +610,7 @@ export default function AddTransportationScreen() {
               <TextInput
                 value={providerRoute}
                 onChangeText={setProviderRoute}
-                placeholder="Route name (e.g. Tokaido Shinkansen)"
+                placeholder="Route name (e.g. Express Line 101)"
                 placeholderTextColor={colors.textMuted}
                 style={styles.providerInputInline}
               />
@@ -776,7 +835,7 @@ export default function AddTransportationScreen() {
                   <TextInput
                     value={bookingNumber}
                     onChangeText={setBookingNumber}
-                    placeholder="e.g. JR-784920"
+                    placeholder="e.g. TRN-784920"
                     placeholderTextColor={colors.textMuted}
                     style={styles.inputField}
                   />
@@ -807,7 +866,7 @@ export default function AddTransportationScreen() {
               <TextInput
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="Add any useful travel notes (e.g. Mount Fuji view on right side, luggage reservation)..."
+                placeholder="Add any useful travel notes, platform numbers, or baggage reminders..."
                 placeholderTextColor={colors.textMuted}
                 multiline
                 numberOfLines={3}

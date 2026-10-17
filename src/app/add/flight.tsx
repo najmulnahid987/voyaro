@@ -30,7 +30,7 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { addItem, fetchItineraryItemById, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
 import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
 import { Trip } from '@/services/mockData';
@@ -63,7 +63,7 @@ const AIRPORT_IATA_MAP: Record<string, string> = {
   doha: 'DOH',
 };
 
-function inferAirportCode(name: string, fallback: string = 'APT'): string {
+function inferAirportCode(name: string, fallback: string = ''): string {
   if (!name) return fallback;
   const clean = name.trim().toUpperCase();
   if (clean.length === 3) return clean;
@@ -89,9 +89,9 @@ export default function AddFlightScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const insets = useSafeAreaInsets();
 
-  const existingItem = useMemo(() => {
+  const [existingItem, setExistingItem] = useState<ConcreteItineraryItem | undefined>(() => {
     return itemId ? getItem(itemId) : undefined;
-  }, [itemId]);
+  });
 
   const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
   const [selectedTripId, setSelectedTripId] = useState<string>(() => {
@@ -103,6 +103,30 @@ export default function AddFlightScreen() {
     return cached && cached.length > 0 ? cached[0].id : '';
   });
   const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  // Asynchronously load item for edit mode if not already in cache
+  useEffect(() => {
+    let isMounted = true;
+    if (itemId) {
+      const cached = getItem(itemId);
+      if (cached) {
+        setExistingItem(cached);
+      } else {
+        fetchItineraryItemById(itemId)
+          .then((fetched) => {
+            if (isMounted && fetched && fetched.type === 'flight') {
+              setExistingItem(fetched);
+            }
+          })
+          .catch((err) => {
+            console.warn('[AddFlight] Error loading item for editing:', err);
+          });
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [itemId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -146,12 +170,12 @@ export default function AddFlightScreen() {
   // -------------------------------------------------------------------------
   // Form State
   // -------------------------------------------------------------------------
-  const [airline, setAirline] = useState(() => flightMeta?.airline || (isEditMode ? '' : 'Emirates'));
-  const [flightNumber, setFlightNumber] = useState(() => flightMeta?.flightNumber || (isEditMode ? '' : 'EK585'));
+  const [airline, setAirline] = useState(() => flightMeta?.airline || '');
+  const [flightNumber, setFlightNumber] = useState(() => flightMeta?.flightNumber || '');
   const [departureAirport, setDepartureAirport] = useState(
-    () => flightMeta?.departureCity || flightMeta?.departureAirport || (isEditMode ? '' : 'Dhaka, Bangladesh')
+    () => flightMeta?.departureCity || flightMeta?.departureAirport || ''
   );
-  const [departureCode, setDepartureCode] = useState(() => flightMeta?.departureAirport || (isEditMode ? '' : 'DAC'));
+  const [departureCode, setDepartureCode] = useState(() => flightMeta?.departureAirport || '');
   const [departureLat, setDepartureLat] = useState<number | undefined>(
     () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
   );
@@ -160,9 +184,9 @@ export default function AddFlightScreen() {
   );
 
   const [arrivalAirport, setArrivalAirport] = useState(
-    () => flightMeta?.arrivalCity || flightMeta?.arrivalAirport || (isEditMode ? '' : 'Tokyo, Japan')
+    () => flightMeta?.arrivalCity || flightMeta?.arrivalAirport || ''
   );
-  const [arrivalCode, setArrivalCode] = useState(() => flightMeta?.arrivalAirport || (isEditMode ? '' : 'NRT'));
+  const [arrivalCode, setArrivalCode] = useState(() => flightMeta?.arrivalAirport || '');
   const [arrivalLat, setArrivalLat] = useState<number | undefined>(
     () => (typeof existingItem?.endLatitude === 'number' ? existingItem.endLatitude : undefined)
   );
@@ -171,15 +195,15 @@ export default function AddFlightScreen() {
   );
 
   const [departureDateObj, setDepartureDateObj] = useState<Date>(
-    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-10T20:30:00'))
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date())
   );
   const [arrivalDateObj, setArrivalDateObj] = useState<Date>(
-    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date('2028-03-11T11:15:00'))
+    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) || new Date() : new Date(Date.now() + 2 * 3600 * 1000))
   );
 
-  const [terminal, setTerminal] = useState(() => flightMeta?.terminal || (isEditMode ? '' : '1'));
-  const [gate, setGate] = useState(() => flightMeta?.gate || (isEditMode ? '' : '12'));
-  const [seat, setSeat] = useState(() => flightMeta?.seat || (isEditMode ? '' : '14A'));
+  const [terminal, setTerminal] = useState(() => flightMeta?.terminal || '');
+  const [gate, setGate] = useState(() => flightMeta?.gate || '');
+  const [seat, setSeat] = useState(() => flightMeta?.seat || '');
   const [cabinClass, setCabinClass] = useState<CabinClass>(() => {
     if (flightMeta?.cabinClass) {
       const cap = flightMeta.cabinClass.charAt(0).toUpperCase() + flightMeta.cabinClass.slice(1);
@@ -188,11 +212,50 @@ export default function AddFlightScreen() {
     return 'Economy';
   });
   const [confirmationNumber, setConfirmationNumber] = useState(
-    () => existingItem?.confirmationNumber || (isEditMode ? '' : 'EK-982134')
+    () => existingItem?.confirmationNumber || ''
   );
   const [notes, setNotes] = useState(
-    () => existingItem?.notes || (isEditMode ? '' : 'Window seats requested. 23kg checked bag included.')
+    () => existingItem?.notes || ''
   );
+
+  // Synchronize form state when existing item loads
+  useEffect(() => {
+    if (existingItem && existingItem.type === 'flight') {
+      const meta = existingItem.metadata as FlightMetadata;
+      if (meta?.airline) setAirline(meta.airline);
+      if (meta?.flightNumber) setFlightNumber(meta.flightNumber);
+      if (meta?.departureCity || meta?.departureAirport) {
+        setDepartureAirport(meta.departureCity || meta.departureAirport);
+      }
+      if (meta?.departureAirport) setDepartureCode(meta.departureAirport);
+      if (typeof existingItem.latitude === 'number') setDepartureLat(existingItem.latitude);
+      if (typeof existingItem.longitude === 'number') setDepartureLng(existingItem.longitude);
+      if (meta?.arrivalCity || meta?.arrivalAirport) {
+        setArrivalAirport(meta.arrivalCity || meta.arrivalAirport);
+      }
+      if (meta?.arrivalAirport) setArrivalCode(meta.arrivalAirport);
+      if (typeof existingItem.endLatitude === 'number') setArrivalLat(existingItem.endLatitude);
+      if (typeof existingItem.endLongitude === 'number') setArrivalLng(existingItem.endLongitude);
+      if (existingItem.startDateTime) {
+        const d = parseDate(existingItem.startDateTime);
+        if (d) setDepartureDateObj(d);
+      }
+      if (existingItem.endDateTime) {
+        const d = parseDate(existingItem.endDateTime);
+        if (d) setArrivalDateObj(d);
+      }
+      if (meta?.terminal) setTerminal(meta.terminal);
+      if (meta?.gate) setGate(meta.gate);
+      if (meta?.seat) setSeat(meta.seat);
+      if (meta?.cabinClass) {
+        const cap = meta.cabinClass.charAt(0).toUpperCase() + meta.cabinClass.slice(1);
+        setCabinClass(cap as CabinClass);
+      }
+      if (existingItem.confirmationNumber) setConfirmationNumber(existingItem.confirmationNumber);
+      if (existingItem.notes) setNotes(existingItem.notes);
+      if (existingItem.tripId) setSelectedTripId(existingItem.tripId);
+    }
+  }, [existingItem]);
 
   const [isClassPickerOpen, setIsClassPickerOpen] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -209,7 +272,7 @@ export default function AddFlightScreen() {
     const tempLng = departureLng;
 
     setDepartureAirport(arrivalAirport);
-    setArrivalCode(arrivalCode);
+    setDepartureCode(arrivalCode);
     setDepartureLat(arrivalLat);
     setDepartureLng(arrivalLng);
 
@@ -221,7 +284,7 @@ export default function AddFlightScreen() {
 
   const handleDepartureChange = (text: string) => {
     setDepartureAirport(text);
-    setDepartureCode(inferAirportCode(text, 'DAC'));
+    setDepartureCode(inferAirportCode(text, ''));
     if (errors.departureAirport) {
       setErrors((prev) => ({ ...prev, departureAirport: '' }));
     }
@@ -229,7 +292,7 @@ export default function AddFlightScreen() {
 
   const handleArrivalChange = (text: string) => {
     setArrivalAirport(text);
-    setArrivalCode(inferAirportCode(text, 'NRT'));
+    setArrivalCode(inferAirportCode(text, ''));
     if (errors.arrivalAirport) {
       setErrors((prev) => ({ ...prev, arrivalAirport: '' }));
     }
@@ -256,14 +319,6 @@ export default function AddFlightScreen() {
 
   const toTimeStr = (d: Date) =>
     `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-
-  const fmt12h = (d: Date) => {
-    let h = d.getHours();
-    const min = String(d.getMinutes()).padStart(2, '0');
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12 || 12;
-    return `${h}:${min} ${ampm}`;
-  };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -598,7 +653,7 @@ export default function AddFlightScreen() {
                     placeholderTextColor={colors.textMuted}
                   />
                   <View style={styles.iataBadge}>
-                    <Text style={styles.iataBadgeText}>{departureCode}</Text>
+                    <Text style={styles.iataBadgeText}>{departureCode || '---'}</Text>
                   </View>
                 </View>
                 <LocationPickerField
@@ -661,7 +716,7 @@ export default function AddFlightScreen() {
                     placeholderTextColor={colors.textMuted}
                   />
                   <View style={styles.iataBadge}>
-                    <Text style={styles.iataBadgeText}>{arrivalCode}</Text>
+                    <Text style={styles.iataBadgeText}>{arrivalCode || '---'}</Text>
                   </View>
                 </View>
                 <LocationPickerField
@@ -878,7 +933,7 @@ export default function AddFlightScreen() {
                 <View>
                   <Text style={styles.previewBadgeText}>PREVIEW</Text>
                   <Text style={styles.previewFlightTitle}>
-                    {airline || 'Airline'} {flightNumber || ''}
+                    {airline ? `${airline} ${flightNumber}`.trim() : 'Flight Details'}
                   </Text>
                   <Text style={styles.previewFlightDate}>
                     {`${departureDateObj.getFullYear()}-${String(departureDateObj.getMonth()+1).padStart(2,'0')}-${String(departureDateObj.getDate()).padStart(2,'0')}`} · {cabinClass}
@@ -897,7 +952,7 @@ export default function AddFlightScreen() {
               {/* Flight Route & Timing Line */}
               <View style={styles.previewRouteRow}>
                 <View style={styles.previewAirportCol}>
-                  <Text style={styles.previewAirportCode}>{departureCode}</Text>
+                  <Text style={styles.previewAirportCode}>{departureCode || 'DEP'}</Text>
                   <Text style={styles.previewAirportTime}>
                     {previewDepartureTime}
                   </Text>
@@ -921,7 +976,7 @@ export default function AddFlightScreen() {
                 </View>
 
                 <View style={[styles.previewAirportCol, styles.previewAirportColRight]}>
-                  <Text style={styles.previewAirportCode}>{arrivalCode}</Text>
+                  <Text style={styles.previewAirportCode}>{arrivalCode || 'ARR'}</Text>
                   <Text style={styles.previewAirportTime}>{previewArrivalTime}</Text>
                 </View>
               </View>

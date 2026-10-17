@@ -30,7 +30,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { addItem, getItem, updateItem } from '@/services/itineraryStore';
+import { addItem, fetchItineraryItemById, getItem, updateItem } from '@/services/itineraryStore';
 import { fetchUserTripRole } from '@/services/collaboration';
 import { getActiveTripId, getCachedTrips, listTrips } from '@/services/trip';
 import { Trip } from '@/services/mockData';
@@ -100,9 +100,9 @@ export default function AddActivityScreen() {
   const { tripId, itemId } = useLocalSearchParams<{ tripId?: string; itemId?: string }>();
   const insets = useSafeAreaInsets();
 
-  const existingItem = useMemo(() => {
+  const [existingItem, setExistingItem] = useState<ConcreteItineraryItem | undefined>(() => {
     return itemId ? getItem(itemId) : undefined;
-  }, [itemId]);
+  });
 
   const [userTrips, setUserTrips] = useState<Trip[]>(() => getCachedTrips() || []);
   const [selectedTripId, setSelectedTripId] = useState<string>(() => {
@@ -114,6 +114,30 @@ export default function AddActivityScreen() {
     return cached && cached.length > 0 ? cached[0].id : '';
   });
   const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
+
+  // Asynchronously load item for edit mode if not already in cache
+  useEffect(() => {
+    let isMounted = true;
+    if (itemId) {
+      const cached = getItem(itemId);
+      if (cached) {
+        setExistingItem(cached);
+      } else {
+        fetchItineraryItemById(itemId)
+          .then((fetched) => {
+            if (isMounted && fetched && fetched.type === 'activity') {
+              setExistingItem(fetched);
+            }
+          })
+          .catch((err) => {
+            console.warn('[AddActivity] Error loading item for editing:', err);
+          });
+      }
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [itemId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -158,10 +182,10 @@ export default function AddActivityScreen() {
   // Form State
   // -------------------------------------------------------------------------
   const [activityName, setActivityName] = useState(
-    () => existingItem?.title || (isEditMode ? '' : 'Shibuya Crossing & Hachiko Tour')
+    () => existingItem?.title || ''
   );
   const [location, setLocation] = useState(
-    () => existingItem?.location || (isEditMode ? '' : 'Shibuya, Tokyo')
+    () => existingItem?.location || ''
   );
   const [latitude, setLatitude] = useState<number | undefined>(
     () => (typeof existingItem?.latitude === 'number' ? existingItem.latitude : undefined)
@@ -174,24 +198,51 @@ export default function AddActivityScreen() {
   );
 
   const [date, setDate] = useState<Date>(
-    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T14:00:00'))
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date())
   );
   const [startTime, setStartTime] = useState<Date>(
-    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date('2028-03-12T14:00:00'))
+    () => (existingItem?.startDateTime ? parseDate(existingItem.startDateTime) || new Date() : new Date())
   );
   const [endTime, setEndTime] = useState<Date | null>(
-    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) : isEditMode ? null : new Date('2028-03-12T16:00:00'))
+    () => (existingItem?.endDateTime ? parseDate(existingItem.endDateTime) : null)
   );
 
   const [website, setWebsite] = useState(
-    () => activityMeta?.website || (isEditMode ? '' : 'https://tokyowalkingtours.jp')
+    () => activityMeta?.website || ''
   );
   const [ticketInfo, setTicketInfo] = useState(
-    () => activityMeta?.ticketInformation || (isEditMode ? '' : 'Mobile QR Voucher (2 Adults)')
+    () => activityMeta?.ticketInformation || ''
   );
   const [notes, setNotes] = useState(
-    () => existingItem?.notes || (isEditMode ? '' : 'Meet local guide near Hachiko Statue exit. Comfortable walking shoes recommended.')
+    () => existingItem?.notes || ''
   );
+
+  // Synchronize form state when existing item loads
+  useEffect(() => {
+    if (existingItem && existingItem.type === 'activity') {
+      const meta = existingItem.metadata as ActivityMetadata;
+      if (existingItem.title) setActivityName(existingItem.title);
+      if (existingItem.location) setLocation(existingItem.location);
+      if (typeof existingItem.latitude === 'number') setLatitude(existingItem.latitude);
+      if (typeof existingItem.longitude === 'number') setLongitude(existingItem.longitude);
+      if (meta?.category) setCategory(meta.category as ActivityCategory);
+      if (existingItem.startDateTime) {
+        const d = parseDate(existingItem.startDateTime);
+        if (d) {
+          setDate(d);
+          setStartTime(d);
+        }
+      }
+      if (existingItem.endDateTime) {
+        const d = parseDate(existingItem.endDateTime);
+        if (d) setEndTime(d);
+      }
+      if (meta?.website) setWebsite(meta.website);
+      if (meta?.ticketInformation) setTicketInfo(meta.ticketInformation);
+      if (existingItem.notes) setNotes(existingItem.notes);
+      if (existingItem.tripId) setSelectedTripId(existingItem.tripId);
+    }
+  }, [existingItem]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -440,7 +491,7 @@ export default function AddActivityScreen() {
                       setActivityName(t);
                       if (errors.activityName) setErrors((prev) => ({ ...prev, activityName: '' }));
                     }}
-                    placeholder="e.g., Shibuya Crossing"
+                    placeholder="e.g. City Tour, Museum Visit"
                     placeholderTextColor={colors.textMuted}
                   />
                 </View>
@@ -655,7 +706,7 @@ export default function AddActivityScreen() {
                         {previewTimeRange}
                       </Text>
                       <Text style={styles.previewTitleText} numberOfLines={2}>
-                        {activityName.trim() || 'Shibuya Crossing'}
+                        {activityName.trim() || 'Activity Name'}
                       </Text>
                       <View style={styles.previewLocationRow}>
                         <Image
@@ -665,7 +716,7 @@ export default function AddActivityScreen() {
                           contentFit="contain"
                         />
                         <Text style={styles.previewLocationText} numberOfLines={1}>
-                          {location.trim() || 'Where is this?'}
+                          {location.trim() || 'Location / Address'}
                         </Text>
                       </View>
                     </View>
