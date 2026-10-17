@@ -32,7 +32,8 @@ export function AddActionButton({ onPress }: AddActionButtonProps) {
       ]}
       accessibilityRole="button"
       accessibilityLabel="Quick Add"
-      hitSlop={6}
+      accessibilityHint="Opens quick actions to add a trip, flight, hotel, activity, or expense"
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <View style={styles.circle}>
         <Image
@@ -40,6 +41,8 @@ export function AddActionButton({ onPress }: AddActionButtonProps) {
           style={styles.icon}
           tintColor={colors.textOnPrimary}
           contentFit="contain"
+          accessibilityElementsHidden={true}
+          importantForAccessibility="no"
         />
       </View>
     </Pressable>

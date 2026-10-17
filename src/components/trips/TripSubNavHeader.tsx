@@ -231,9 +231,11 @@ export function TripSubNavHeader({
                 isActive && styles.tabButtonActive,
                 pressed && !isActive && styles.tabButtonPressed,
               ]}
+              hitSlop={{ top: 7, bottom: 7, left: 4, right: 4 }}
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={`${tab.label} tab`}
+              accessibilityHint={`Navigates to ${tab.label.toLowerCase()} screen`}
             >
               <Text
                 style={[

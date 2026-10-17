@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -86,13 +86,15 @@ export default function TripsScreen() {
     }
   };
 
-  const filteredTrips = trips.filter((trip) => {
-    if (activeFilter === 'all') return true;
-    if (activeFilter === 'ongoing') return trip.status === 'ongoing' || trip.status === 'current';
-    if (activeFilter === 'upcoming') return trip.status === 'upcoming';
-    if (activeFilter === 'past') return trip.status === 'past';
-    return true;
-  });
+  const filteredTrips = useMemo(() => {
+    return trips.filter((trip) => {
+      if (activeFilter === 'all') return true;
+      if (activeFilter === 'ongoing') return trip.status === 'ongoing' || trip.status === 'current';
+      if (activeFilter === 'upcoming') return trip.status === 'upcoming';
+      if (activeFilter === 'past') return trip.status === 'past';
+      return true;
+    });
+  }, [trips, activeFilter]);
 
   const handleTripPress = (tripId: string) => {
     router.push(`/(tabs)/trips/${tripId}`);
@@ -169,9 +171,11 @@ export default function TripsScreen() {
                       isActive ? styles.filterPillActive : styles.filterPillInactive,
                       pressed && styles.pillPressed,
                     ]}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: isActive }}
                     accessibilityLabel={`Filter by ${filter.label}`}
+                    accessibilityHint={`Filters trips list to show ${filter.label.toLowerCase()}`}
                   >
                     <Text
                       style={[
@@ -227,6 +231,16 @@ export default function TripsScreen() {
                 const isOngoing = trip.status === 'ongoing' || trip.status === 'current';
                 const isPast = trip.status === 'past';
 
+                const cardA11yLabel = [
+                  trip.title,
+                  trip.destination ? `in ${trip.destination}` : null,
+                  trip.dates ? `dates ${trip.dates}` : null,
+                  trip.statusBadgeLabel ? `status ${trip.statusBadgeLabel}` : null,
+                  trip.userRole ? `role ${trip.userRole}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ');
+
                 return (
                   <Pressable
                     key={trip.id}
@@ -237,7 +251,8 @@ export default function TripsScreen() {
                       pressed && styles.cardPressed,
                     ]}
                     accessibilityRole="button"
-                    accessibilityLabel={`Trip: ${trip.title}`}
+                    accessibilityLabel={cardA11yLabel}
+                    accessibilityHint="Double tap to open trip details"
                   >
                     {/* Top Cover Banner */}
                     <View

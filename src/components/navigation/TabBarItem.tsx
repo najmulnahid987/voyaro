@@ -42,15 +42,19 @@ export function TabBarItem({
           styles.activeContainer,
           pressed && styles.pressed,
         ]}
+        hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
         accessibilityRole="tab"
         accessibilityState={{ selected: true }}
         accessibilityLabel={label}
+        accessibilityHint={`Switches to ${label} tab`}
       >
         <Image
           source={iconSource}
           style={styles.activeIcon}
           tintColor={colors.primary}
           contentFit="contain"
+          accessibilityElementsHidden={true}
+          importantForAccessibility="no"
         />
         <Text style={styles.activeLabel}>{label}</Text>
       </Pressable>
@@ -67,13 +71,16 @@ export function TabBarItem({
       accessibilityRole="tab"
       accessibilityState={{ selected: false }}
       accessibilityLabel={label}
-      hitSlop={6}
+      accessibilityHint={`Switches to ${label} tab`}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
     >
       <Image
         source={iconSource}
         style={styles.inactiveIcon}
         tintColor={colors.textSecondary}
         contentFit="contain"
+        accessibilityElementsHidden={true}
+        importantForAccessibility="no"
       />
     </Pressable>
   );

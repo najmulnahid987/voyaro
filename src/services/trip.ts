@@ -71,6 +71,7 @@ type ActiveTripListener = (tripId: string | null) => void;
 
 const listeners = new Set<TripsListener>();
 const activeTripListeners = new Set<ActiveTripListener>();
+const inFlightTripPromises = new Map<string, Promise<Trip | null>>();
 
 function notifyListeners() {
   const current = cachedTrips ? [...cachedTrips] : [];
@@ -137,6 +138,7 @@ export function subscribeToActiveTrip(listener: ActiveTripListener): () => void 
 export function clearTripsCache(): void {
   cachedTrips = null;
   currentActiveTripId = null;
+  inFlightTripPromises.clear();
   notifyListeners();
   notifyActiveTripListeners();
 }
@@ -251,56 +253,73 @@ export async function listTrips(): Promise<Trip[]> {
 /**
  * Fetches a single trip by its UUID, including member travelers and current user role.
  * Respects RLS: returns null if the trip doesn't exist or user lacks membership.
+ * Deduplicates in-flight concurrent requests so sibling and parent screens sharing a route
+ * do not trigger redundant simultaneous Supabase queries.
  */
 export async function fetchTripById(tripId: string): Promise<Trip | null> {
   if (!tripId || typeof tripId !== 'string' || !tripId.trim()) {
     return null;
   }
 
-  const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-  if (userError || !user) {
-    return null;
+  const cleanTripId = tripId.trim();
+  const existingInFlight = inFlightTripPromises.get(cleanTripId);
+  if (existingInFlight) {
+    return existingInFlight;
   }
 
-  const { data: row, error } = await supabase
-    .from('trips')
-    .select('*, trip_budgets(*)')
-    .eq('id', tripId.trim())
-    .maybeSingle();
+  const fetchPromise = (async () => {
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-  if (error) {
-    // 22P02 is postgres error code for invalid input syntax (e.g. invalid UUID format)
-    if ((error as any).code === '22P02') {
-      return null;
+      if (userError || !user) {
+        return null;
+      }
+
+      const { data: row, error } = await supabase
+        .from('trips')
+        .select('*, trip_budgets(*)')
+        .eq('id', cleanTripId)
+        .maybeSingle();
+
+      if (error) {
+        // 22P02 is postgres error code for invalid input syntax (e.g. invalid UUID format)
+        if ((error as any).code === '22P02') {
+          return null;
+        }
+        console.warn(`[Voyaro Trips] Error fetching trip ${cleanTripId}:`, error.message);
+        throw new Error(`Unable to fetch trip: ${error.message}`);
+      }
+
+      if (!row) {
+        return null;
+      }
+
+      // Fetch active travelers and current user's role
+      let travelers: Traveler[] = [];
+      let userRole: 'owner' | 'editor' | 'viewer' | null = null;
+      try {
+        const [fetchedTravelers, fetchedRole] = await Promise.all([
+          listTripMembers(cleanTripId),
+          fetchUserTripRole(cleanTripId),
+        ]);
+        travelers = fetchedTravelers;
+        userRole = fetchedRole;
+      } catch (collabErr) {
+        console.warn('[Voyaro Trips] Collaboration metadata notice:', collabErr);
+      }
+
+      return buildDomainTrip(row as TripRow, (row as any).trip_budgets, {
+        travelers,
+        userRole: userRole || (row.user_id === user.id ? 'owner' : 'viewer'),
+        currentUserId: user.id,
+      });
+    } finally {
+      inFlightTripPromises.delete(cleanTripId);
     }
-    console.warn(`[Voyaro Trips] Error fetching trip ${tripId}:`, error.message);
-    throw new Error(`Unable to fetch trip: ${error.message}`);
-  }
+  })();
 
-  if (!row) {
-    return null;
-  }
-
-  // Fetch active travelers and current user's role
-  let travelers: Traveler[] = [];
-  let userRole: 'owner' | 'editor' | 'viewer' | null = null;
-  try {
-    const [fetchedTravelers, fetchedRole] = await Promise.all([
-      listTripMembers(tripId),
-      fetchUserTripRole(tripId),
-    ]);
-    travelers = fetchedTravelers;
-    userRole = fetchedRole;
-  } catch (collabErr) {
-    console.warn('[Voyaro Trips] Collaboration metadata notice:', collabErr);
-  }
-
-  return buildDomainTrip(row as TripRow, (row as any).trip_budgets, {
-    travelers,
-    userRole: userRole || (row.user_id === user.id ? 'owner' : 'viewer'),
-    currentUserId: user.id,
-  });
+  inFlightTripPromises.set(cleanTripId, fetchPromise);
+  return fetchPromise;
 }
 
 /**

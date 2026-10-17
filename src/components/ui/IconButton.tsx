@@ -5,13 +5,13 @@
  * Convenience wrapper around Button's icon variant with defined sizes.
  */
 import React from 'react';
-import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, PressableProps, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { colors, radius, shadows } from '@/theme';
+import { colors, shadows } from '@/theme';
 
 export type IconButtonSize = 'sm' | 'md' | 'lg';
 export type IconButtonVariant = 'default' | 'filled' | 'outline' | 'ghost';
@@ -26,6 +26,8 @@ export interface IconButtonProps {
   style?: StyleProp<ViewStyle>;
   testID?: string;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
+  hitSlop?: PressableProps['hitSlop'];
 }
 
 const sizeMap: Record<IconButtonSize, number> = { sm: 36, md: 44, lg: 52 };
@@ -41,6 +43,8 @@ export function IconButton({
   style,
   testID,
   accessibilityLabel,
+  accessibilityHint,
+  hitSlop,
 }: IconButtonProps) {
   const scale = useSharedValue(1);
 
@@ -56,6 +60,8 @@ export function IconButton({
   };
 
   const dim = sizeMap[size];
+  const effectiveHitSlop =
+    hitSlop ?? (size === 'sm' ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined);
 
   return (
     <AnimatedPressable
@@ -63,8 +69,10 @@ export function IconButton({
       onPress={!disabled ? onPress : undefined}
       onPressIn={!disabled ? handlePressIn : undefined}
       onPressOut={!disabled ? handlePressOut : undefined}
+      hitSlop={effectiveHitSlop}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled }}
       style={[
         animatedStyle,

@@ -162,6 +162,15 @@ export function ItineraryItemCard({
     }
   };
 
+  const accessibleLabelParts = [
+    presentation.categoryLabel,
+    item.title,
+    timeString ? `at ${timeString}` : null,
+    presentation.primaryDetail ? presentation.primaryDetail : null,
+    showConfirmation && item.confirmationNumber ? `confirmation ${item.confirmationNumber}` : null,
+  ].filter(Boolean);
+  const accessibilityLabelText = accessibleLabelParts.join(', ');
+
   return (
     <Pressable
       testID={testID}
@@ -172,7 +181,8 @@ export function ItineraryItemCard({
         style,
       ]}
       accessibilityRole="button"
-      accessibilityLabel={`${presentation.categoryLabel}: ${item.title}`}
+      accessibilityLabel={accessibilityLabelText}
+      accessibilityHint={onPress ? 'Double tap to view details or edit this reservation' : undefined}
     >
       {/* Top Header Row: Category Badge + Start Time */}
       <View style={styles.headerRow}>
@@ -195,6 +205,8 @@ export function ItineraryItemCard({
             style={styles.metaIcon}
             contentFit="contain"
             tintColor={colors.textSecondary}
+            accessibilityElementsHidden={true}
+            importantForAccessibility="no"
           />
           <Text style={styles.primaryDetailText} numberOfLines={1}>
             {presentation.primaryDetail}

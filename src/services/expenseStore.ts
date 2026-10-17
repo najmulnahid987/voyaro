@@ -14,7 +14,7 @@
  *  - Cache cleanup on account logout.
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
 import {
   CategorySpending,
@@ -947,7 +947,7 @@ export function getStoreRevision(): number {
  * Automatically fetches from Supabase and re-renders screens upon mutations.
  */
 export function useTripExpenses(tripId?: string) {
-  useSyncExternalStore(subscribeToExpenses, getStoreRevision, getStoreRevision);
+  const revision = useSyncExternalStore(subscribeToExpenses, getStoreRevision, getStoreRevision);
 
   const normalized = normalizeTripId(tripId);
   const [loading, setLoading] = useState<boolean>(!isDevMockTrip(tripId) && Boolean(tripId));
@@ -999,9 +999,9 @@ export function useTripExpenses(tripId?: string) {
     }
   }, [tripId]);
 
-  const expenses = getExpensesByTrip(normalized);
-  const budget = getTripBudget(normalized);
-  const summary = getTripExpenseSummary(normalized);
+  const expenses = useMemo(() => getExpensesByTrip(normalized), [normalized, revision]);
+  const budget = useMemo(() => getTripBudget(normalized), [normalized, revision]);
+  const summary = useMemo(() => getTripExpenseSummary(normalized), [normalized, revision]);
 
   return {
     tripId: normalized,

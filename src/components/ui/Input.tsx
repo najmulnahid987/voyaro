@@ -85,7 +85,9 @@ export function Input({
             placeholderTextColor={colors.textMuted}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            accessibilityLabel={label}
+            accessibilityLabel={label || textInputProps.placeholder}
+            aria-invalid={hasError}
+            accessibilityHint={hasError && error ? `Error: ${error}` : textInputProps.accessibilityHint}
             {...textInputProps}
           />
 
@@ -97,6 +99,8 @@ export function Input({
           <Text
             style={[styles.helperText, hasError && styles.errorText]}
             numberOfLines={2}
+            accessibilityRole={hasError ? 'alert' : undefined}
+            accessibilityLiveRegion={hasError ? 'polite' : undefined}
           >
             {error ?? helperText}
           </Text>

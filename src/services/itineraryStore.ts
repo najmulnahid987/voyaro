@@ -13,12 +13,11 @@
  *  - Safe cache cleanup on logout.
  */
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { supabase } from './supabase';
 import {
   ConcreteItineraryItem,
   CreateItineraryItemInput,
-  ItineraryItem,
   UpdateItineraryItemInput,
 } from '@/types/itinerary';
 import { sortItineraryItems } from '../utils/itineraryDateUtils';
@@ -600,8 +599,9 @@ export function useItinerary(tripId?: string) {
     }
   }, [tripId]);
 
-  const items = sortItineraryItems(
-    allItems.filter((item) => item.tripId === normalized)
+  const items = useMemo(
+    () => sortItineraryItems(allItems.filter((item) => item.tripId === normalized)),
+    [allItems, normalized]
   );
 
   return {
