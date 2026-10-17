@@ -256,9 +256,9 @@ export async function listTrips(): Promise<Trip[]> {
  * Deduplicates in-flight concurrent requests so sibling and parent screens sharing a route
  * do not trigger redundant simultaneous Supabase queries.
  */
-export async function fetchTripById(tripId: string): Promise<Trip | null> {
+export function fetchTripById(tripId: string): Promise<Trip | null> {
   if (!tripId || typeof tripId !== 'string' || !tripId.trim()) {
-    return null;
+    return Promise.resolve(null);
   }
 
   const cleanTripId = tripId.trim();
