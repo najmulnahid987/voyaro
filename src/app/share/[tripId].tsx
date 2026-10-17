@@ -34,6 +34,20 @@ import { Traveler, Trip } from '@/services/mockData';
 import { DomainTripInvitation } from '@/services/mappers';
 
 /**
+ * Formats expiration timestamp into relative remaining days string.
+ */
+function formatExpiresIn(expiresAtStr: string): string {
+  try {
+    const diffMs = new Date(expiresAtStr).getTime() - Date.now();
+    if (diffMs <= 0) return 'Expired';
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `Expires in ${days} ${days === 1 ? 'day' : 'days'}`;
+  } catch {
+    return 'Expires soon';
+  }
+}
+
+/**
  * Route: /share/[tripId] — Trip Sharing & Invites (Phase 8 — Step 5)
  * Allows trip owners to invite co-travelers via email, manage roles, copy/share invite links,
  * and view active members & pending invitations.
@@ -180,8 +194,6 @@ export default function ShareTripScreen() {
       setInviteEmail('');
       setIsInviteFormOpen(false);
 
-      const url = getInvitationUrl(createdInvite.token);
-
       Alert.alert(
         'Invitation Created',
         `Invitation for ${cleanEmail} created as ${inviteRole === 'editor' ? 'an Editor' : 'a Viewer'}.\n\nYou can copy or share the invite link directly.`,
@@ -285,17 +297,6 @@ export default function ShareTripScreen() {
         },
       ]
     );
-  };
-
-  const formatExpiresIn = (expiresAtStr: string) => {
-    try {
-      const diffMs = new Date(expiresAtStr).getTime() - Date.now();
-      if (diffMs <= 0) return 'Expired';
-      const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      return `Expires in ${days} ${days === 1 ? 'day' : 'days'}`;
-    } catch {
-      return 'Expires soon';
-    }
   };
 
   if (loading) {
