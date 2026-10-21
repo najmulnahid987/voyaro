@@ -330,6 +330,56 @@ export type Database = {
           },
         ]
       }
+      trip_documents: {
+        Row: {
+          category: string
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number
+          id: string
+          mime_type: string
+          title: string
+          trip_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size: number
+          id?: string
+          mime_type: string
+          title: string
+          trip_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          title?: string
+          trip_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_documents_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: false
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -526,4 +576,8 @@ export type TripMemberUpdate = TablesUpdate<"trip_members">
 export type TripInvitationRow = Tables<"trip_invitations">
 export type TripInvitationInsert = TablesInsert<"trip_invitations">
 export type TripInvitationUpdate = TablesUpdate<"trip_invitations">
+
+export type TripDocumentRow = Tables<"trip_documents">
+export type TripDocumentInsert = TablesInsert<"trip_documents">
+export type TripDocumentUpdate = TablesUpdate<"trip_documents">
 

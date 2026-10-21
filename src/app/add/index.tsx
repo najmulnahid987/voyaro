@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { Button } from '@/components/ui';
+import { isDevMockTrip } from '@/services/expenseStore';
+import { Trip, getTripById } from '@/services/mockData';
+import { getActiveTripId, getCachedTrips, listTrips, setActiveTripId } from '@/services/trip';
+import { colors, fontFamily, radius, shadows, spacing } from '@/theme';
+import { Image } from 'expo-image';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -9,14 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
-import { getActiveTripId, getCachedTrips, listTrips, setActiveTripId } from '@/services/trip';
-import { Trip, getTripById } from '@/services/mockData';
-import { isDevMockTrip } from '@/services/expenseStore';
-import { Button } from '@/components/ui';
 
 interface QuickAddOption {
   key: string;

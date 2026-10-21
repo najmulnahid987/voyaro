@@ -30,6 +30,7 @@ import { router, usePathname } from 'expo-router';
 import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { getTripById, isDevMockTrip } from '@/services/mockData';
 import { getActiveTripId, getCachedTrips } from '@/services/trip';
+import { emitDocumentUploadRequest } from '@/components/documents';
 
 export type TripSubNavTabKey =
   | 'overview'
@@ -78,6 +79,10 @@ export interface TripSubNavHeaderProps {
    */
   onAdd?: () => void;
   /**
+   * Optional custom document upload action for the documents tab
+   */
+  onAddDocument?: () => void;
+  /**
    * Optional custom tab press callback
    */
   onTabPress?: (tabKey: TripSubNavTabKey) => void;
@@ -90,6 +95,7 @@ export function TripSubNavHeader({
   canAdd = true,
   onBack,
   onAdd,
+  onAddDocument,
   onTabPress,
 }: TripSubNavHeaderProps) {
   const pathname = usePathname();
@@ -132,11 +138,21 @@ export function TripSubNavHeader({
     if (!canAdd) {
       return;
     }
+    // Context-aware add trigger based on active tab
+    if (currentTab === 'documents') {
+      if (onAddDocument) {
+        onAddDocument();
+      } else if (onAdd) {
+        onAdd();
+      } else {
+        emitDocumentUploadRequest(effectiveTripId);
+      }
+      return;
+    }
     if (onAdd) {
       onAdd();
       return;
     }
-    // Context-aware add trigger based on active tab
     if (currentTab === 'expenses') {
       if (effectiveTripId) {
         router.push({
@@ -195,7 +211,16 @@ export function TripSubNavHeader({
               pressed && styles.buttonPressed,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Add trip reservation or item"
+            accessibilityLabel={
+              currentTab === 'documents'
+                ? 'Upload document'
+                : 'Add trip reservation or item'
+            }
+            accessibilityHint={
+              currentTab === 'documents'
+                ? 'Opens document upload dialog'
+                : undefined
+            }
             hitSlop={8}
           >
             <Image

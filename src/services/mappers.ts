@@ -28,8 +28,17 @@ import {
   TripMemberRow,
   TripInvitationRow,
   TripInvitationInsert,
+  TripDocumentRow,
+  TripDocumentInsert,
+  TripDocumentUpdate,
   Json,
 } from '@/types/database.types';
+import {
+  TripDocument,
+  DocumentCategory,
+  DocumentUploadInput,
+  UpdateDocumentInput,
+} from '@/types/document';
 import {
   ItineraryItem as DomainItineraryItem,
   ItineraryItemType,
@@ -510,5 +519,55 @@ export function mapTripInvitationToInsert(
     role,
     status: 'pending',
   };
+}
+
+// ---------------------------------------------------------------------------
+// 7. Document Mappers (Phase 12)
+// ---------------------------------------------------------------------------
+
+export function mapDocumentRowToDomain(row: TripDocumentRow): TripDocument {
+  return {
+    id: row.id,
+    tripId: row.trip_id,
+    userId: row.user_id,
+    title: row.title,
+    category: row.category as DocumentCategory,
+    filePath: row.file_path,
+    fileName: row.file_name,
+    fileSize: Number(row.file_size),
+    mimeType: row.mime_type,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapDocumentInputToInsert(
+  input: DocumentUploadInput,
+  userId?: string
+): TripDocumentInsert {
+  const effectiveUserId = userId || input.userId;
+  if (!effectiveUserId) {
+    throw new Error('User ID is required to insert a trip document.');
+  }
+
+  return {
+    trip_id: input.tripId,
+    user_id: effectiveUserId,
+    title: input.title.trim(),
+    category: input.category,
+    file_path: input.filePath,
+    file_name: input.fileName,
+    file_size: Math.round(input.fileSize),
+    mime_type: input.mimeType,
+  };
+}
+
+export function mapDocumentToUpdate(
+  input: UpdateDocumentInput
+): TripDocumentUpdate {
+  const update: TripDocumentUpdate = {};
+  if (input.title !== undefined) update.title = input.title.trim();
+  if (input.category !== undefined) update.category = input.category;
+  return update;
 }
 
