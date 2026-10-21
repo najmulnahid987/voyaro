@@ -190,7 +190,7 @@ export default function WelcomeScreen() {
             {/* Small Legal / Privacy Disclaimer */}
             <View style={styles.legalContainer}>
               <Text style={styles.legalText}>
-                By continuing, you agree to Voyaro's{' '}
+                {"By continuing, you agree to Voyaro's "}
                 <Text style={styles.legalLink} onPress={handleTerms}>
                   Terms of Service
                 </Text>{' '}

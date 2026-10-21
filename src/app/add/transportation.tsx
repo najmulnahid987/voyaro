@@ -47,15 +47,40 @@ interface TransportModeOption {
   id: TransportationType;
   label: string;
   subLabel: string;
-  emoji: string;
+  icon: any;
 }
 
 const TRANSPORT_MODES: TransportModeOption[] = [
-  { id: 'train', label: 'Train', subLabel: 'Train selected', emoji: '🚆' },
-  { id: 'bus', label: 'Bus', subLabel: 'Bus selected', emoji: '🚌' },
-  { id: 'rental_car', label: 'Car', subLabel: 'Car selected', emoji: '🚗' },
-  { id: 'taxi', label: 'Taxi', subLabel: 'Taxi selected', emoji: '🚕' },
-  { id: 'other', label: 'Other', subLabel: 'Other transport selected', emoji: '🧭' },
+  {
+    id: 'train',
+    label: 'Train',
+    subLabel: 'Train selected',
+    icon: require('@/assets/images/icons/train.svg'),
+  },
+  {
+    id: 'bus',
+    label: 'Bus',
+    subLabel: 'Bus selected',
+    icon: require('@/assets/images/icons/bus.svg'),
+  },
+  {
+    id: 'rental_car',
+    label: 'Car',
+    subLabel: 'Car selected',
+    icon: require('@/assets/images/icons/car.svg'),
+  },
+  {
+    id: 'taxi',
+    label: 'Taxi',
+    subLabel: 'Taxi selected',
+    icon: require('@/assets/images/icons/taxi.svg'),
+  },
+  {
+    id: 'other',
+    label: 'Other',
+    subLabel: 'Other transport selected',
+    icon: require('@/assets/images/icons/compass.svg'),
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -129,7 +154,6 @@ export default function AddTransportationScreen() {
     const cached = getCachedTrips();
     return cached && cached.length > 0 ? cached[0].id : '';
   });
-  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
 
   // Asynchronously load item for edit mode if not already in cache
   useEffect(() => {
@@ -480,12 +504,12 @@ export default function AddTransportationScreen() {
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>
-                {isEditMode ? 'Edit transportation' : 'Add transportation'}
+                {isEditMode ? 'Edit Ground Transport' : 'Add Ground Transport'}
               </Text>
               <Text style={styles.headerSubtitle}>
                 {isEditMode
-                  ? 'Update route, schedule, or seat details.'
-                  : 'Enter details for a train, bus, car, or transfer segment.'}
+                  ? 'Update route, schedule, or booking details.'
+                  : 'Manage trains, buses, car rentals, transfers, or ferries.'}
               </Text>
             </View>
 
@@ -513,55 +537,6 @@ export default function AddTransportationScreen() {
             </View>
           ) : null}
 
-          {/* ── Trip Selector (Shown when user has multiple trips) ─── */}
-          {userTrips.length > 1 && (
-            <View style={styles.section}>
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>TRIP</Text>
-              </View>
-              <Pressable
-                onPress={() => setShowTripDropdown((prev) => !prev)}
-                style={styles.selectTrigger}
-                accessibilityRole="button"
-                accessibilityLabel="Select trip"
-              >
-                <View style={styles.selectTriggerLeft}>
-                  <Text style={styles.selectTriggerText} numberOfLines={1}>
-                    {userTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
-                  </Text>
-                </View>
-                <Text style={styles.selectTriggerArrow}>▼</Text>
-              </Pressable>
-
-              {showTripDropdown && (
-                <View style={styles.dropdownMenu}>
-                  {userTrips.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => {
-                        setSelectedTripId(t.id);
-                        setShowTripDropdown(false);
-                      }}
-                      style={[
-                        styles.dropdownItem,
-                        selectedTripId === t.id && styles.dropdownItemActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          selectedTripId === t.id && styles.dropdownItemTextActive,
-                        ]}
-                      >
-                        {t.title}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-
           {/* ── Section 1: Transportation Type Selector ──────────────── */}
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
@@ -584,10 +559,21 @@ export default function AddTransportationScreen() {
                     accessibilityRole="radio"
                     accessibilityState={{ selected: isSelected }}
                   >
-                    <View style={styles.modeIconContainer}>
-                      <Text style={[styles.modeEmoji, isSelected && styles.modeEmojiSelected]}>
-                        {mode.emoji}
-                      </Text>
+                    <View
+                      style={[
+                        styles.modeIconContainer,
+                        isSelected && styles.modeIconContainerSelected,
+                      ]}
+                    >
+                      <Image
+                        source={mode.icon}
+                        style={[
+                          styles.modeIcon,
+                          isSelected && styles.modeIconSelected,
+                        ]}
+                        tintColor={isSelected ? colors.primary : colors.textSecondary}
+                        contentFit="contain"
+                      />
                     </View>
                     <Text
                       style={[
@@ -891,7 +877,12 @@ export default function AddTransportationScreen() {
                 {/* Header: Mode badge + title */}
                 <View style={styles.previewHeaderRow}>
                   <View style={styles.previewModeBadge}>
-                    <Text style={styles.previewModeEmoji}>{activeMode.emoji}</Text>
+                    <Image
+                      source={activeMode.icon}
+                      style={styles.previewModeIcon}
+                      tintColor={colors.primary}
+                      contentFit="contain"
+                    />
                     <Text style={styles.previewModeLabel}>{activeMode.label}</Text>
                   </View>
                   <View style={styles.previewConfirmedBadge}>
@@ -1030,8 +1021,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   container: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
   },
 
   // --- Header ---
@@ -1039,30 +1030,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
   headerTextGroup: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   headerTitle: {
     fontFamily: typography.screenTitle.fontFamily,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
-    letterSpacing: -0.28,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    letterSpacing: -0.2,
     color: colors.textPrimary,
   },
   headerSubtitle: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   closeButton: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -1085,29 +1076,29 @@ const styles = StyleSheet.create({
 
   // --- Sections ---
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: 6,
   },
   sectionLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     color: colors.textMuted,
   },
   sectionActiveLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '600',
     color: colors.primary,
     fontFamily: typography.caption.fontFamily,
   },
   sectionOptionalLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
     fontStyle: 'italic',
     fontFamily: typography.caption.fontFamily,
@@ -1129,10 +1120,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 2,
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -1148,20 +1139,25 @@ const styles = StyleSheet.create({
   modeIconContainer: {
     width: 28,
     height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
+    backgroundColor: colors.backgroundAlt,
   },
-  modeEmoji: {
-    fontSize: 18,
-    opacity: 0.65,
+  modeIconContainerSelected: {
+    backgroundColor: colors.primarySurface,
   },
-  modeEmojiSelected: {
-    opacity: 1,
+  modeIcon: {
+    width: 16,
+    height: 16,
+  },
+  modeIconSelected: {
+    tintColor: colors.primary,
   },
   modeLabel: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: colors.textSecondary,
   },
@@ -1174,10 +1170,10 @@ const styles = StyleSheet.create({
   // --- Card ---
   card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    padding: 12,
     ...shadows.card,
     position: 'relative',
   },
@@ -1186,8 +1182,8 @@ const styles = StyleSheet.create({
   dashedConnector: {
     position: 'absolute',
     left: 28,
-    top: 42,
-    bottom: 42,
+    top: 36,
+    bottom: 36,
     width: 1.5,
     borderLeftWidth: 1.5,
     borderLeftColor: colors.primary,
@@ -1210,7 +1206,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 22,
+    marginTop: 18,
   },
   fromPinDot: {
     width: 8,
@@ -1225,7 +1221,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 22,
+    marginTop: 18,
     ...shadows.card,
   },
   toPinIcon: {
@@ -1239,31 +1235,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 3,
   },
   routeFromTag: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 0.6,
     color: colors.primary,
   },
   routeToTag: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     letterSpacing: 0.6,
     color: colors.textPrimary,
   },
   routeHelpText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
   },
   swapRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    marginVertical: -8,
+    marginVertical: -6,
     paddingRight: 4,
     zIndex: 2,
   },
@@ -1279,20 +1275,20 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   swapIcon: {
-    width: 16,
-    height: 16,
+    width: 15,
+    height: 15,
   },
 
   // --- Inputs ---
   inputField: {
-    height: 44,
+    height: 40,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.input,
     paddingHorizontal: spacing.sm,
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '500',
     color: colors.textPrimary,
   },
@@ -1301,12 +1297,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontFamily: fontFamily.regular,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.error,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   formGroup: {
-    gap: 4,
+    gap: 3,
   },
   fieldLabel: {
     fontFamily: fontFamily.semiBold,
@@ -1352,11 +1348,11 @@ const styles = StyleSheet.create({
   timeGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
-    marginTop: 4,
+    marginTop: 3,
   },
   timeCol: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
 
   // --- Duration ---
@@ -1380,12 +1376,12 @@ const styles = StyleSheet.create({
   },
   directText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textMuted,
   },
   durationValue: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textSecondary,
   },
   durationHighlight: {
@@ -1395,21 +1391,21 @@ const styles = StyleSheet.create({
 
   // --- Notes ---
   notesTextArea: {
-    minHeight: 76,
+    minHeight: 70,
     backgroundColor: colors.background,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.input,
     padding: spacing.sm,
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textPrimary,
   },
 
   // --- Preview / Review Card ---
   previewLiveLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '500',
     color: colors.primary,
     fontFamily: typography.caption.fontFamily,
@@ -1418,7 +1414,7 @@ const styles = StyleSheet.create({
   previewCard: {
     position: 'relative',
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
@@ -1429,40 +1425,41 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 4,
+    width: 3.5,
     backgroundColor: colors.primary,
   },
   previewBody: {
-    padding: spacing.lg,
-    paddingLeft: spacing.lg + 4,
+    padding: 12,
+    paddingLeft: 16,
   },
   previewHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs + 2,
   },
   previewModeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     backgroundColor: colors.primarySurface,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
     borderRadius: radius.full,
   },
-  previewModeEmoji: {
-    fontSize: 16,
+  previewModeIcon: {
+    width: 14,
+    height: 14,
   },
   previewModeLabel: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '600',
     color: colors.primary,
   },
   previewConfirmedBadge: {
-    paddingVertical: 3,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.full,
     borderWidth: 1,
@@ -1470,7 +1467,7 @@ const styles = StyleSheet.create({
   },
   previewConfirmedText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
     fontWeight: '500',
   },
@@ -1479,8 +1476,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.input,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    padding: 10,
+    marginBottom: spacing.xs,
   },
   previewRouteCol: {
     flex: 1,
@@ -1489,7 +1486,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   previewRouteTag: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
     letterSpacing: 0.8,
     color: colors.textMuted,
@@ -1497,7 +1494,7 @@ const styles = StyleSheet.create({
   },
   previewRouteMain: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
+    fontSize: 13.5,
     fontWeight: '600',
     color: colors.textPrimary,
   },
@@ -1507,17 +1504,17 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   previewArrowLine: {
-    width: 32,
+    width: 24,
     height: 1,
     backgroundColor: colors.border,
   },
   previewArrowIcon: {
-    fontSize: 18,
+    fontSize: 15,
     color: colors.primary,
     fontWeight: '700',
   },
   previewDurationBadge: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
     color: colors.primary,
     fontFamily: typography.caption.fontFamily,
@@ -1527,15 +1524,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.input,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
+    padding: 6,
+    marginBottom: spacing.xs,
   },
   previewTimeItem: {
     flex: 1,
     alignItems: 'center',
   },
   previewTimeTag: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
     letterSpacing: 0.6,
     color: colors.textMuted,
@@ -1543,18 +1540,18 @@ const styles = StyleSheet.create({
   },
   previewTimeValue: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   previewTimeDivider: {
     width: 1,
-    height: 28,
+    height: 22,
     backgroundColor: colors.border,
     marginHorizontal: spacing.xs,
   },
   previewOvernightTag: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.primary,
     fontWeight: '600',
   },
@@ -1562,13 +1559,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: spacing.sm,
+    paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: colors.backgroundAlt,
   },
   previewProviderText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textSecondary,
     flex: 1,
   },
@@ -1579,14 +1576,14 @@ const styles = StyleSheet.create({
   },
   previewRefText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '600',
     color: colors.textMuted,
     letterSpacing: 0.4,
   },
   previewSeatText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textSecondary,
   },
 
@@ -1594,10 +1591,10 @@ const styles = StyleSheet.create({
   actionsSection: {
     flexDirection: 'column',
     gap: spacing.sm,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
   submitButton: {
-    height: 52,
+    height: 44,
     backgroundColor: colors.primary,
     borderRadius: radius.button,
     alignItems: 'center',
@@ -1606,12 +1603,12 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
   },
   cancelButton: {
-    height: 48,
+    height: 40,
     backgroundColor: colors.transparent,
     borderRadius: radius.button,
     alignItems: 'center',
@@ -1619,14 +1616,14 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.textSecondary,
   },
   errorBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
     backgroundColor: 'rgba(176, 74, 74, 0.10)',
     borderRadius: radius.card,
     borderWidth: 1,
@@ -1634,60 +1631,8 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     ...typography.body,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.error,
     textAlign: 'center',
-  },
-  selectTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    height: 48,
-    marginTop: spacing.xs,
-  },
-  selectTriggerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  selectTriggerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  selectTriggerArrow: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
-  dropdownMenu: {
-    marginTop: spacing.xs,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    overflow: 'hidden',
-    ...shadows.sheet,
-  },
-  dropdownItem: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  dropdownItemActive: {
-    backgroundColor: 'rgba(44, 95, 94, 0.08)',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  dropdownItemTextActive: {
-    color: colors.primary,
-    fontWeight: '600',
   },
 });

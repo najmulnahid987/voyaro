@@ -447,8 +447,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
     paddingBottom: spacing['4xl'],
   },
   container: {
@@ -459,15 +459,15 @@ const styles = StyleSheet.create({
 
   // ── Header Section ─────────────────────────────────────────────────────────
   headerSection: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   headerTitle: {
-    ...typography.display,
-    fontSize: 28,
-    lineHeight: 34,
+    ...typography.screenTitle,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '600',
     color: colors.textPrimary,
-    letterSpacing: -0.28,
+    letterSpacing: -0.2,
   },
   headerSubtitleRow: {
     flexDirection: 'row',
@@ -477,29 +477,29 @@ const styles = StyleSheet.create({
   },
   headerSubtitle: {
     ...typography.body,
-    fontSize: 16,
-    lineHeight: 24,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textSecondary,
     maxWidth: 200,
   },
   createButton: {
     backgroundColor: colors.primary, // #2c5f5e
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
     ...shadows.card,
   },
   createButtonIcon: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     tintColor: colors.textOnPrimary,
   },
   createButtonText: {
     ...typography.label,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.textOnPrimary,
     letterSpacing: 0.1,
@@ -507,14 +507,14 @@ const styles = StyleSheet.create({
 
   // ── Filter Bar ─────────────────────────────────────────────────────────────
   filterContainer: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
   filterScrollContent: {
-    gap: 8,
+    gap: 6,
   },
   filterPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
     borderRadius: radius.full,
   },
   filterPillActive: {
@@ -528,7 +528,7 @@ const styles = StyleSheet.create({
   },
   filterPillText: {
     ...typography.label,
-    fontSize: 14,
+    fontSize: 13,
     letterSpacing: 0.1,
   },
   filterPillTextActive: {
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
 
   // ── Trip Cards List ────────────────────────────────────────────────────────
   tripsList: {
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   tripCard: {
     backgroundColor: colors.surface,
@@ -558,9 +558,9 @@ const styles = StyleSheet.create({
 
   // Card Banner
   cardBanner: {
-    padding: 16,
+    padding: 12,
     position: 'relative',
-    minHeight: 110,
+    minHeight: 76,
     justifyContent: 'flex-end',
   },
   bannerOngoing: {
@@ -574,15 +574,15 @@ const styles = StyleSheet.create({
   },
   bannerBadgesContainer: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 10,
+    right: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   roleBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: radius.full,
     borderWidth: 1,
   },
@@ -596,9 +596,9 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: {
     ...typography.label,
-    fontSize: 10,
-    lineHeight: 14,
-    letterSpacing: 0.6,
+    fontSize: 9.5,
+    lineHeight: 13,
+    letterSpacing: 0.5,
     fontWeight: '700',
   },
   roleBadgeTextEditor: {
@@ -608,8 +608,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
     borderRadius: radius.full,
   },
   statusBadgeOngoing: {
@@ -620,9 +620,9 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     ...typography.label,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.6,
+    fontSize: 11,
+    lineHeight: 15,
+    letterSpacing: 0.5,
     fontWeight: '600',
     textTransform: 'uppercase',
   },
@@ -633,14 +633,14 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   bannerInfo: {
-    paddingTop: 32,
-    gap: 4,
+    paddingTop: 18,
+    gap: 2,
   },
   tripTitle: {
     ...typography.screenTitle,
-    fontSize: 24,
-    lineHeight: 32,
-    fontWeight: '500',
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '600',
     color: colors.textPrimary,
   },
   tripTitlePast: {
@@ -648,8 +648,8 @@ const styles = StyleSheet.create({
   },
   tripDates: {
     ...typography.bodySecondary,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
   },
   tripDatesPast: {
@@ -659,8 +659,8 @@ const styles = StyleSheet.create({
   // Card Footer
   cardFooter: {
     backgroundColor: colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -668,7 +668,7 @@ const styles = StyleSheet.create({
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
   },
   metaItem: {
     flexDirection: 'row',

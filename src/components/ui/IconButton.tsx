@@ -30,7 +30,7 @@ export interface IconButtonProps {
   hitSlop?: PressableProps['hitSlop'];
 }
 
-const sizeMap: Record<IconButtonSize, number> = { sm: 36, md: 44, lg: 52 };
+const sizeMap: Record<IconButtonSize, number> = { sm: 32, md: 40, lg: 48 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -61,7 +61,12 @@ export function IconButton({
 
   const dim = sizeMap[size];
   const effectiveHitSlop =
-    hitSlop ?? (size === 'sm' ? { top: 6, bottom: 6, left: 6, right: 6 } : undefined);
+    hitSlop ??
+    (size === 'sm'
+      ? { top: 6, bottom: 6, left: 6, right: 6 }
+      : size === 'md'
+        ? { top: 2, bottom: 2, left: 2, right: 2 }
+        : undefined);
 
   return (
     <AnimatedPressable

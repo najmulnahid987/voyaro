@@ -48,11 +48,11 @@ export function SectionHeader({
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
-        {subtitle && (
+        {Boolean(subtitle) ? (
           <Text style={styles.subtitle} numberOfLines={1}>
             {subtitle}
           </Text>
-        )}
+        ) : null}
       </View>
 
       {/* Right: optional action */}
@@ -64,9 +64,9 @@ export function SectionHeader({
           accessibilityLabel={actionLabel ?? 'Section action'}
           style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
         >
-          {actionLabel && (
+          {Boolean(actionLabel) ? (
             <Text style={styles.actionLabel}>{actionLabel}</Text>
-          )}
+          ) : null}
           {actionIcon && <View style={styles.actionIcon}>{actionIcon}</View>}
         </Pressable>
       )}

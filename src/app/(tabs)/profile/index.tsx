@@ -231,34 +231,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   container: {
     width: '100%',
     maxWidth: 480,
     alignSelf: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
   },
 
   // ── Header Title ─────────────────────────────────────────────────────────
   headerTitleSection: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xs,
+    marginTop: spacing.sm,
+    marginBottom: 2,
   },
   headerTitle: {
-    ...typography.display,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
+    ...typography.screenTitle,
+    fontWeight: '700',
     color: colors.textPrimary,
     letterSpacing: -0.28,
   },
   headerSubtitle: {
-    ...typography.body,
-    fontSize: 15,
-    lineHeight: 22,
+    ...typography.caption,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
 
   // ── Hero Card ────────────────────────────────────────────────────────────
@@ -267,28 +265,28 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.xl,
+    padding: spacing.md,
     ...shadows.card,
   },
   avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
   },
   heroInfo: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   userName: {
     ...typography.sectionTitle,
-    fontSize: 20,
-    lineHeight: 26,
+    fontSize: 18,
+    lineHeight: 24,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   userEmail: {
     ...typography.bodySecondary,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
   },
   badgeRow: {
@@ -298,8 +296,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   interestsContainer: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -309,7 +307,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.6,
     color: colors.textMuted,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   interestsRow: {
     flexDirection: 'row',
@@ -317,7 +315,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   interestPill: {
-    paddingVertical: 4,
+    paddingVertical: 3,
     paddingHorizontal: spacing.sm,
   },
 
@@ -333,8 +331,8 @@ const styles = StyleSheet.create({
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md + 2,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
     backgroundColor: colors.surface,
   },
   menuItemBorder: {
@@ -345,8 +343,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundAlt,
   },
   menuIconContainer: {
-    width: 38,
-    height: 38,
+    width: 36,
+    height: 36,
     borderRadius: radius.button,
     backgroundColor: colors.primarySurface,
     alignItems: 'center',

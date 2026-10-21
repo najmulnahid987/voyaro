@@ -201,18 +201,18 @@ export function BudgetOverviewCard({
 const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md + 2,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.sm + 2,
     ...shadows.card,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   headerLeftGroup: {
     flexDirection: 'row',
@@ -221,10 +221,10 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: typography.sectionTitle.fontFamily,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   editBudgetButton: {
     backgroundColor: colors.background,
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   overBudgetBadge: {
     backgroundColor: 'rgba(176, 74, 74, 0.12)',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.error,
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
   activeBadge: {
     backgroundColor: 'rgba(44, 95, 94, 0.10)',
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: radius.full,
   },
   activeBadgeText: {
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   noBudgetBadge: {
     backgroundColor: colors.background,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   metricColumn: {
     flex: 1,
@@ -301,32 +301,32 @@ const styles = StyleSheet.create({
   },
   metricOverline: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: colors.textMuted,
     letterSpacing: 0.6,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   metricSpentValue: {
     fontFamily: typography.stat.fontFamily,
-    fontSize: 26,
-    fontWeight: '800',
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   metricRemainingValue: {
     fontFamily: typography.stat.fontFamily,
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.primary,
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
   },
   metricOverBudgetValue: {
     color: colors.error,
   },
   metricUnsetValue: {
     fontFamily: typography.stat.fontFamily,
-    fontSize: 22,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textMuted,
   },
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   progressTrack: {
-    height: 8,
+    height: 6,
     borderRadius: radius.full,
     backgroundColor: colors.background,
     overflow: 'hidden',

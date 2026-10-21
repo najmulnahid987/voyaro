@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -130,6 +131,33 @@ function getCategoryLabel(type?: string): string {
   }
 }
 
+function isUrl(str?: string | null): boolean {
+  if (!str) return false;
+  const trimmed = str.trim();
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.includes('maps.app.goo.gl') ||
+    trimmed.includes('google.com/maps')
+  );
+}
+
+function cleanAddressText(
+  address?: string | null,
+  fallbackLocation?: string | null
+): string | undefined {
+  if (address && !isUrl(address)) {
+    return address.trim();
+  }
+  if (fallbackLocation && !isUrl(fallbackLocation)) {
+    return fallbackLocation.trim();
+  }
+  if (address || fallbackLocation) {
+    return 'Location on map';
+  }
+  return undefined;
+}
+
 export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPresentation {
   const item = marker.originalItem;
   if (!item) {
@@ -144,7 +172,7 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
       typeLabel: marker.categoryLabel || 'Location',
       categoryIcon: require('@/assets/images/icons/location-pin.svg'),
       categoryColor: colors.primary,
-      addressText: marker.description,
+      addressText: cleanAddressText(marker.description, null),
       canOpenDetail: false,
       canDirections,
     };
@@ -167,7 +195,7 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
       const dateStr = formatItineraryDate(targetDate, 'medium');
       const timeStr = formatItineraryTime(targetDate);
 
-      let addressText = item.location;
+      let addressText = cleanAddressText(item.location, null);
       if (isArrival && (meta?.terminal || meta?.gate)) {
         addressText = [
           meta?.arrivalAirport ? `${meta.arrivalAirport}` : null,
@@ -209,7 +237,7 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
         categoryIcon: require('@/assets/images/icons/hotel.svg'),
         categoryColor: '#2c5f5e',
         scheduledTimeText: dateRangeText,
-        addressText: meta?.address || item.location,
+        addressText: cleanAddressText(meta?.address, item.location),
         confirmationNumber: item.confirmationNumber,
         canOpenDetail: true,
       };
@@ -232,7 +260,10 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
       const dateStr = formatItineraryDate(targetDate, 'medium');
       const timeStr = formatItineraryTime(targetDate);
 
-      const seatOrPlatform = [meta?.platform ? `Platform ${meta.platform}` : null, meta?.seat ? `Seat ${meta.seat}` : null]
+      const seatOrPlatform = [
+        meta?.platform ? `Platform ${meta.platform}` : null,
+        meta?.seat ? `Seat ${meta.seat}` : null,
+      ]
         .filter(Boolean)
         .join(' · ');
 
@@ -243,7 +274,7 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
         categoryIcon: require('@/assets/images/icons/swap-vert.svg'),
         categoryColor: '#3b7a57',
         scheduledTimeText: timeStr ? `${dateStr} · ${timeStr}` : dateStr,
-        addressText: seatOrPlatform || item.location,
+        addressText: seatOrPlatform || cleanAddressText(item.location, null),
         confirmationNumber: meta?.bookingNumber || item.confirmationNumber,
         canOpenDetail: true,
       };
@@ -264,7 +295,7 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
         categoryIcon: require('@/assets/images/icons/landscape.svg'),
         categoryColor: '#b86b28',
         scheduledTimeText: timeStr ? `${dateStr} · ${timeStr}` : dateStr,
-        addressText: meta?.meetingPoint || item.location,
+        addressText: cleanAddressText(meta?.meetingPoint, item.location),
         confirmationNumber: item.confirmationNumber,
         canOpenDetail: true,
       };
@@ -272,10 +303,16 @@ export function getMarkerPresentation(marker: MapMarkerItem): SelectedMarkerPres
     }
   }
 
+  const rawAddressForDirections =
+    item?.location ||
+    (item?.metadata as any)?.address ||
+    (item?.metadata as any)?.meetingPoint ||
+    rawPresentation.addressText;
+
   const canDirections = canGetDirections({
     latitude: marker.coordinate?.latitude,
     longitude: marker.coordinate?.longitude,
-    address: rawPresentation.addressText,
+    address: rawAddressForDirections,
   });
 
   return {
@@ -328,11 +365,11 @@ export default function TripMapScreen() {
   // 2. Load Trip Itinerary Items reactively from Supabase repository
   const { items, loading, error, refresh } = useItinerary(effectiveTripId);
 
-  // 3. UI State: Selection & Category Filtering (restores cached selection if user was viewing a marker)
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(() => {
     return tripSelectedMarkerCache.get(effectiveTripId) || null;
   });
   const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [selectedCardHeight, setSelectedCardHeight] = useState<number>(0);
 
   // User Location State (ephemeral in-memory only, never persisted/uploaded to Supabase)
   const [userLocation, setUserLocation] = useState<MapCoordinate | null>(null);
@@ -594,11 +631,13 @@ export default function TripMapScreen() {
 
   const handleMapPress = useCallback(() => {
     setSelectedMarkerId(null);
+    setSelectedCardHeight(0);
     tripSelectedMarkerCache.set(effectiveTripId, null);
   }, [effectiveTripId]);
 
   const handleCloseCard = useCallback(() => {
     setSelectedMarkerId(null);
+    setSelectedCardHeight(0);
     tripSelectedMarkerCache.set(effectiveTripId, null);
   }, [effectiveTripId]);
 
@@ -783,6 +822,15 @@ export default function TripMapScreen() {
     });
   }, [isLocating, effectiveTripId]);
 
+  // Compute dynamic bottom clearance for floating map controls
+  const controlsBottomOffset = useMemo(() => {
+    const base = Math.max(contentPaddingBottom, spacing.md);
+    if (selectedMarker && selectedCardHeight > 0) {
+      return base + selectedCardHeight + 10;
+    }
+    return base + 6;
+  }, [contentPaddingBottom, selectedMarker, selectedCardHeight]);
+
   return (
     <View style={styles.container}>
       {/* ── 1. Full-Screen Map Canvas ───────────────────────────────────── */}
@@ -858,7 +906,12 @@ export default function TripMapScreen() {
       {/* ── 2. Floating Category Legend / Filter Bar ────────────────────── */}
       {allValidMarkers.length > 0 && !isRouteMode && (
         <View style={styles.legendContainer} pointerEvents="box-none">
-          <View style={styles.legendPillsRow}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.legendScrollContent}
+            style={styles.legendScrollView}
+          >
             {/* All Pill */}
             <Pressable
               onPress={() => setActiveCategory('all')}
@@ -867,7 +920,8 @@ export default function TripMapScreen() {
                 activeCategory === 'all' && styles.legendPillActive,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Show all locations"
+              accessibilityLabel={`Show all ${categoryCounts.all} locations`}
+              hitSlop={4}
             >
               <Text
                 style={[
@@ -888,9 +942,20 @@ export default function TripMapScreen() {
                   activeCategory === 'hotel' && styles.legendPillActive,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Filter stays"
+                accessibilityLabel={`Filter ${categoryCounts.hotel} stays`}
+                hitSlop={4}
               >
-                <View style={[styles.pillDot, { backgroundColor: getCategoryColor('hotel') }]} />
+                <View
+                  style={[
+                    styles.pillDot,
+                    {
+                      backgroundColor:
+                        activeCategory === 'hotel'
+                          ? colors.textOnPrimary
+                          : getCategoryColor('hotel'),
+                    },
+                  ]}
+                />
                 <Text
                   style={[
                     styles.legendPillText,
@@ -905,15 +970,28 @@ export default function TripMapScreen() {
             {/* Activities */}
             {categoryCounts.activity > 0 && (
               <Pressable
-                onPress={() => setActiveCategory(activeCategory === 'activity' ? 'all' : 'activity')}
+                onPress={() =>
+                  setActiveCategory(activeCategory === 'activity' ? 'all' : 'activity')
+                }
                 style={[
                   styles.legendPill,
                   activeCategory === 'activity' && styles.legendPillActive,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Filter activities"
+                accessibilityLabel={`Filter ${categoryCounts.activity} activities`}
+                hitSlop={4}
               >
-                <View style={[styles.pillDot, { backgroundColor: getCategoryColor('activity') }]} />
+                <View
+                  style={[
+                    styles.pillDot,
+                    {
+                      backgroundColor:
+                        activeCategory === 'activity'
+                          ? colors.textOnPrimary
+                          : getCategoryColor('activity'),
+                    },
+                  ]}
+                />
                 <Text
                   style={[
                     styles.legendPillText,
@@ -928,19 +1006,35 @@ export default function TripMapScreen() {
             {/* Transit */}
             {categoryCounts.transportation > 0 && (
               <Pressable
-                onPress={() => setActiveCategory(activeCategory === 'transportation' ? 'all' : 'transportation')}
+                onPress={() =>
+                  setActiveCategory(
+                    activeCategory === 'transportation' ? 'all' : 'transportation'
+                  )
+                }
                 style={[
                   styles.legendPill,
                   activeCategory === 'transportation' && styles.legendPillActive,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Filter transit"
+                accessibilityLabel={`Filter ${categoryCounts.transportation} transit locations`}
+                hitSlop={4}
               >
-                <View style={[styles.pillDot, { backgroundColor: getCategoryColor('transportation') }]} />
+                <View
+                  style={[
+                    styles.pillDot,
+                    {
+                      backgroundColor:
+                        activeCategory === 'transportation'
+                          ? colors.textOnPrimary
+                          : getCategoryColor('transportation'),
+                    },
+                  ]}
+                />
                 <Text
                   style={[
                     styles.legendPillText,
-                    activeCategory === 'transportation' && styles.legendPillTextActive,
+                    activeCategory === 'transportation' &&
+                      styles.legendPillTextActive,
                   ]}
                 >
                   Transit ({categoryCounts.transportation})
@@ -951,15 +1045,28 @@ export default function TripMapScreen() {
             {/* Flights */}
             {categoryCounts.flight > 0 && (
               <Pressable
-                onPress={() => setActiveCategory(activeCategory === 'flight' ? 'all' : 'flight')}
+                onPress={() =>
+                  setActiveCategory(activeCategory === 'flight' ? 'all' : 'flight')
+                }
                 style={[
                   styles.legendPill,
                   activeCategory === 'flight' && styles.legendPillActive,
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Filter flights"
+                accessibilityLabel={`Filter ${categoryCounts.flight} flights`}
+                hitSlop={4}
               >
-                <View style={[styles.pillDot, { backgroundColor: getCategoryColor('flight') }]} />
+                <View
+                  style={[
+                    styles.pillDot,
+                    {
+                      backgroundColor:
+                        activeCategory === 'flight'
+                          ? colors.textOnPrimary
+                          : getCategoryColor('flight'),
+                    },
+                  ]}
+                />
                 <Text
                   style={[
                     styles.legendPillText,
@@ -970,7 +1077,7 @@ export default function TripMapScreen() {
                 </Text>
               </Pressable>
             )}
-          </View>
+          </ScrollView>
         </View>
       )}
 
@@ -979,8 +1086,14 @@ export default function TripMapScreen() {
         <View
           style={[
             styles.bottomCardContainer,
-            { bottom: Math.max(contentPaddingBottom, spacing.lg) + spacing.xs },
+            { bottom: Math.max(contentPaddingBottom, spacing.md) + 6 },
           ]}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0 && Math.abs(h - selectedCardHeight) > 2) {
+              setSelectedCardHeight(h);
+            }
+          }}
         >
           <View style={styles.selectedCard}>
             {/* Header row: Category Badge, Confirmation Pill, & Close Button */}
@@ -1019,6 +1132,7 @@ export default function TripMapScreen() {
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel="Close location card"
+                  hitSlop={6}
                 >
                   <Image
                     source={require('@/assets/images/icons/close.svg')}
@@ -1036,7 +1150,8 @@ export default function TripMapScreen() {
             </Text>
 
             {/* Reservation / Activity Title if distinct from Place Name */}
-            {presentation.reservationTitle && presentation.reservationTitle !== presentation.placeName ? (
+            {presentation.reservationTitle &&
+            presentation.reservationTitle !== presentation.placeName ? (
               <Text style={styles.cardSubtitle} numberOfLines={1}>
                 {presentation.reservationTitle}
               </Text>
@@ -1107,11 +1222,20 @@ export default function TripMapScreen() {
               )}
 
               {selectedMarker.originalItem &&
-                (selectedMarker.originalItem.type === 'transportation' || selectedMarker.originalItem.type === 'flight') &&
-                isValidCoordinate(selectedMarker.originalItem.latitude, selectedMarker.originalItem.longitude) &&
-                isValidCoordinate(selectedMarker.originalItem.endLatitude, selectedMarker.originalItem.endLongitude) && (
+                (selectedMarker.originalItem.type === 'transportation' ||
+                  selectedMarker.originalItem.type === 'flight') &&
+                isValidCoordinate(
+                  selectedMarker.originalItem.latitude,
+                  selectedMarker.originalItem.longitude
+                ) &&
+                isValidCoordinate(
+                  selectedMarker.originalItem.endLatitude,
+                  selectedMarker.originalItem.endLongitude
+                ) && (
                   <Pressable
-                    onPress={() => handlePreviewTransitRoute(selectedMarker.originalItem!)}
+                    onPress={() =>
+                      handlePreviewTransitRoute(selectedMarker.originalItem!)
+                    }
                     style={({ pressed }) => [
                       styles.actionButtonSecondary,
                       pressed && styles.actionButtonPressed,
@@ -1142,14 +1266,13 @@ export default function TripMapScreen() {
           hasLocationPermission && styles.myLocationButtonActive,
           pressed && styles.buttonPressed,
           {
-            bottom: selectedMarker
-              ? Math.max(contentPaddingBottom, spacing.lg) + 215
-              : Math.max(contentPaddingBottom, spacing.lg) + spacing.md,
+            bottom: controlsBottomOffset,
           },
         ]}
         accessibilityRole="button"
         accessibilityLabel="Locate my position on map"
         accessibilityHint="Centers map on your current location"
+        hitSlop={6}
       >
         {isLocating ? (
           <ActivityIndicator size="small" color={colors.primary} />
@@ -1178,14 +1301,15 @@ export default function TripMapScreen() {
           isRouteMode && styles.routeFloatingButtonActive,
           pressed && styles.buttonPressed,
           {
-            bottom: selectedMarker
-              ? Math.max(contentPaddingBottom, spacing.lg) + 275
-              : Math.max(contentPaddingBottom, spacing.lg) + spacing.md + 56,
+            bottom: controlsBottomOffset + 44,
           },
         ]}
         accessibilityRole="button"
-        accessibilityLabel={isRouteMode ? 'Exit route mode' : 'Select two locations for route preview'}
+        accessibilityLabel={
+          isRouteMode ? 'Exit route mode' : 'Select two locations for route preview'
+        }
         accessibilityHint="Toggles two-point route selection mode"
+        hitSlop={6}
       >
         <Image
           source={require('@/assets/images/icons/place.svg')}
@@ -1387,23 +1511,28 @@ const styles = StyleSheet.create({
   // --- Category Legend / Filter Bar ---
   legendContainer: {
     position: 'absolute',
-    top: spacing.md,
-    left: spacing.md,
-    right: spacing.md,
+    top: spacing.xs + 2,
+    left: spacing.sm,
+    right: spacing.sm,
     zIndex: 10,
   },
-  legendPillsRow: {
+  legendScrollView: {
+    flexGrow: 0,
+  },
+  legendScrollContent: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.xs,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
   },
   legendPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 5,
     backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: 'rgba(44, 95, 94, 0.12)',
@@ -1414,15 +1543,15 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   pillDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   legendPillText: {
     ...typography.caption,
     fontFamily: fontFamily.medium,
     color: colors.textPrimary,
-    fontSize: 12,
+    fontSize: 11,
   },
   legendPillTextActive: {
     color: colors.textOnPrimary,
@@ -1432,17 +1561,17 @@ const styles = StyleSheet.create({
   // --- Selected Marker Bottom Card ---
   bottomCardContainer: {
     position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
+    left: spacing.md,
+    right: spacing.md,
     zIndex: 20,
     alignItems: 'center',
   },
   selectedCard: {
     width: '100%',
-    maxWidth: 520,
+    maxWidth: 480,
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    padding: spacing.lg,
+    borderRadius: 14,
+    padding: 10,
     borderWidth: 1,
     borderColor: 'rgba(44, 95, 94, 0.12)',
     ...shadows.sheet,
@@ -1506,20 +1635,22 @@ const styles = StyleSheet.create({
     ...typography.cardTitle,
     fontFamily: fontFamily.semiBold,
     color: colors.textPrimary,
+    fontSize: 14,
+    lineHeight: 18,
     marginBottom: 2,
   },
   cardSubtitle: {
     ...typography.caption,
     fontFamily: fontFamily.medium,
     color: colors.textSecondary,
-    fontSize: 13,
-    marginBottom: spacing.xs,
+    fontSize: 11.5,
+    marginBottom: 2,
   },
   cardMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   metaRowIcon: {
     width: 12,
@@ -1528,13 +1659,13 @@ const styles = StyleSheet.create({
   cardDateText: {
     ...typography.caption,
     color: colors.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
   },
   locationDetailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   locationPinIcon: {
     width: 12,
@@ -1543,20 +1674,20 @@ const styles = StyleSheet.create({
   locationText: {
     ...typography.caption,
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 11,
     flex: 1,
   },
   cardActionsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
     alignItems: 'center',
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   actionButtonPrimary: {
     flex: 1,
     backgroundColor: colors.primary,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderRadius: radius.button,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1566,17 +1697,17 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontFamily: fontFamily.semiBold,
     color: colors.textOnPrimary,
-    fontSize: 13,
+    fontSize: 11.5,
   },
   actionButtonSecondary: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 4,
     backgroundColor: colors.primarySurface,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderRadius: radius.button,
     borderWidth: 1,
     borderColor: 'rgba(44, 95, 94, 0.15)',
@@ -1585,11 +1716,11 @@ const styles = StyleSheet.create({
     ...typography.label,
     fontFamily: fontFamily.semiBold,
     color: colors.primary,
-    fontSize: 13,
+    fontSize: 11.5,
   },
   actionButtonIcon: {
-    width: 13,
-    height: 13,
+    width: 12,
+    height: 12,
   },
   actionButtonPressed: {
     opacity: 0.8,
@@ -1718,9 +1849,9 @@ const styles = StyleSheet.create({
   myLocationButton: {
     position: 'absolute',
     right: spacing.md,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1734,8 +1865,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySurface,
   },
   myLocationIcon: {
-    width: 22,
-    height: 22,
+    width: 16,
+    height: 16,
   },
 
   // --- Location Rationale & Status Dialog ---
@@ -1813,7 +1944,7 @@ const styles = StyleSheet.create({
   // --- Route Mode HUD & Floating Controls (Step 8) ---
   routeModeBanner: {
     position: 'absolute',
-    top: 70,
+    top: spacing.xs + 2,
     left: spacing.md,
     right: spacing.md,
     zIndex: 12,
@@ -1903,9 +2034,9 @@ const styles = StyleSheet.create({
   routeFloatingButton: {
     position: 'absolute',
     right: spacing.md,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',

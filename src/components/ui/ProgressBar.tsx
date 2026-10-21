@@ -70,18 +70,18 @@ export function ProgressBar({
 
   return (
     <View testID={testID} style={[styles.wrapper, style]}>
-      {(label || valueLabel) && (
+      {Boolean(label || valueLabel) ? (
         <View style={styles.labelRow}>
-          {label && (
+          {Boolean(label) ? (
             <Text style={styles.label} numberOfLines={1}>
               {label}
             </Text>
-          )}
-          {valueLabel && (
+          ) : null}
+          {Boolean(valueLabel) ? (
             <Text style={styles.valueLabel}>{valueLabel}</Text>
-          )}
+          ) : null}
         </View>
-      )}
+      ) : null}
 
       {/* Track */}
       <View

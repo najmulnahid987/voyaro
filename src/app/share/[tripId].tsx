@@ -16,7 +16,7 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { Avatar, Badge, Button, IconButton, Input } from '@/components/ui';
 import { fetchTripById } from '@/services/trip';
 import {
@@ -30,7 +30,7 @@ import {
   getTripShareUrl,
   subscribeToTripCollaboration,
 } from '@/services/collaboration';
-import { Traveler, Trip } from '@/services/mockData';
+import { Traveler, Trip, getTripById } from '@/services/mockData';
 import { DomainTripInvitation } from '@/services/mappers';
 
 /**
@@ -80,8 +80,17 @@ export default function ShareTripScreen() {
         listTripMembers(tripId),
         listTripInvitations(tripId),
       ]);
-      setTrip(fetchedTrip);
-      setMembers(fetchedMembers);
+      const activeTrip =
+        fetchedTrip ||
+        getTripById(tripId) ||
+        (tripId === '[id]' ? getTripById('demo-trip') : null) ||
+        null;
+      setTrip(activeTrip);
+      setMembers(
+        fetchedMembers && fetchedMembers.length > 0
+          ? fetchedMembers
+          : (activeTrip?.travelers || [])
+      );
       // Filter out any invitations that are not pending or have already expired
       const now = new Date();
       const activeInvites = (fetchedInvites || []).filter(
@@ -316,28 +325,12 @@ export default function ShareTripScreen() {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Nav Bar */}
-        <View style={styles.navBar}>
-          <IconButton
-            variant="ghost"
-            size="sm"
-            onPress={() => router.back()}
-            icon={
-              <Image
-                source={require('@/assets/images/arrow-left.svg')}
-                style={styles.navIcon}
-                contentFit="contain"
-              />
-            }
-            accessibilityLabel="Go back"
-          />
-          <Text style={styles.navTitle}>Share Trip</Text>
-          <View style={styles.navRightPlaceholder} />
-        </View>
-
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            Platform.OS === 'web' && { paddingTop: spacing.md },
+          ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -348,14 +341,35 @@ export default function ShareTripScreen() {
             />
           }
         >
-          {/* Trip Summary Card */}
-          <View style={styles.tripCard}>
+          <View style={styles.contentWrapper}>
+            {/* Top Sub-Navigation Bar */}
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                hitSlop={8}
+              >
+                <Text style={styles.backArrow}>←</Text>
+              </Pressable>
+
+              <Text style={styles.topBarTitle}>Share Trip</Text>
+
+              <View style={styles.topBarSpacer} />
+            </View>
+
+            {/* Trip Summary Card */}
+            <View style={styles.tripCard}>
             <View style={styles.tripCardContent}>
               <View style={styles.badgeRow}>
                 <Text style={styles.tripCategoryBadge}>
                   {trip?.status?.toUpperCase() || 'UPCOMING'} TRIP
                 </Text>
-                {trip?.userRole && (
+                {trip?.userRole ? (
                   <Badge
                     label={trip.userRole.toUpperCase()}
                     variant={
@@ -366,7 +380,7 @@ export default function ShareTripScreen() {
                         : 'default'
                     }
                   />
-                )}
+                ) : null}
               </View>
               <Text style={styles.tripTitle}>{trip?.title || 'Trip'}</Text>
               <Text style={styles.tripDates}>
@@ -641,11 +655,11 @@ export default function ShareTripScreen() {
                           <Text style={styles.youIndicator}>(You)</Text>
                         )}
                       </View>
-                      {member.email && (
+                      {member.email ? (
                         <Text style={styles.memberEmail} numberOfLines={1}>
                           {member.email}
                         </Text>
-                      )}
+                      ) : null}
                     </View>
 
                     <View style={styles.memberRight}>
@@ -672,10 +686,11 @@ export default function ShareTripScreen() {
               })}
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
-  );
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  </SafeAreaView>
+);
 }
 
 const styles = StyleSheet.create({
@@ -697,44 +712,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  navTitle: {
-    ...typography.sectionTitle,
-    fontSize: 17,
-    color: colors.textPrimary,
-  },
-  navIcon: {
-    width: 20,
-    height: 20,
-    tintColor: colors.textPrimary,
-  },
-  navRightPlaceholder: {
-    width: 36,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.md,
-    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     paddingBottom: spacing['2xl'],
+  },
+  contentWrapper: {
+    width: '100%',
+    maxWidth: 500,
+    alignSelf: 'center',
+    gap: spacing.md,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: 2,
+  },
+  topBarTitle: {
+    fontFamily: typography.sectionTitle.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  topBarSpacer: {
+    width: 32,
+  },
+  iconCircleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  backArrow: {
+    fontSize: 16,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  buttonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
   },
   tripCard: {
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    borderRadius: radius.card,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.md,
+    gap: spacing.xs,
+    ...shadows.card,
   },
   tripCardContent: {
     gap: 6,
@@ -843,9 +878,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textOnPrimary,
     fontWeight: '600',
-  },
-  buttonPressed: {
-    opacity: 0.7,
   },
   formContainer: {
     gap: spacing.md,

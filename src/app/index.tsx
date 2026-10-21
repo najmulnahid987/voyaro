@@ -22,8 +22,8 @@ import { initAuth } from '@/services/auth';
  *  - Logged Out / No Session -> /(auth)/welcome
  */
 export default function SplashScreen() {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.96)).current;
+  const [fadeAnim] = React.useState(() => new Animated.Value(0));
+  const [scaleAnim] = React.useState(() => new Animated.Value(0.96));
 
   useEffect(() => {
     let isMounted = true;

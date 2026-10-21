@@ -163,14 +163,11 @@ export default function AddIndexScreen() {
         <View style={styles.headerRow}>
           <View style={styles.headerTextGroup}>
             <Text style={styles.headerTitle}>Quick Add</Text>
-            <Text style={styles.headerSubtitle}>
-              {activeTrip
-                ? `Add items to ${activeTrip.title}`
-                : 'Select what you would like to add'}
-            </Text>
+            <Text style={styles.headerSubtitle}>Add items to your trip</Text>
           </View>
           <Pressable
             onPress={handleClose}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={styles.closeButton}
             accessibilityRole="button"
             accessibilityLabel="Close"
@@ -222,12 +219,20 @@ export default function AddIndexScreen() {
             <View style={styles.tripBanner}>
               <View style={styles.tripBannerLeft}>
                 <Text style={styles.tripBannerLabel}>CURRENT TRIP</Text>
-                <Text style={styles.tripBannerTitle} numberOfLines={1}>
-                  {activeTrip?.title || 'Trip Selected'}
+                <Text
+                  style={styles.tripBannerTitle}
+                  numberOfLines={2}
+                  ellipsizeMode="tail"
+                >
+                  {activeTrip?.title || 'Select a trip'}
                 </Text>
-                {activeTrip?.destination ? (
-                  <Text style={styles.tripBannerDest} numberOfLines={1}>
-                    📍 {activeTrip.destination}
+                {activeTrip?.destination?.trim() ? (
+                  <Text
+                    style={styles.tripBannerDest}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    📍 {activeTrip.destination.trim()}
                   </Text>
                 ) : null}
               </View>
@@ -235,9 +240,14 @@ export default function AddIndexScreen() {
               {trips.length > 1 && (
                 <Pressable
                   onPress={() => setShowTripPicker(true)}
-                  style={styles.switchTripButton}
+                  style={({ pressed }) => [
+                    styles.switchTripButton,
+                    pressed && styles.switchTripButtonPressed,
+                  ]}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityRole="button"
                   accessibilityLabel="Switch trip"
+                  accessibilityHint="Opens list of trips to switch current selection"
                 >
                   <Text style={styles.switchTripText}>Switch</Text>
                 </Pressable>
@@ -295,7 +305,12 @@ export default function AddIndexScreen() {
             <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Choose Trip</Text>
-                <Pressable onPress={() => setShowTripPicker(false)}>
+                <Pressable
+                  onPress={() => setShowTripPicker(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close trip picker"
+                >
                   <Image
                     source={require('@/assets/images/icons/close.svg')}
                     style={styles.modalCloseIcon}
@@ -304,7 +319,7 @@ export default function AddIndexScreen() {
                   />
                 </Pressable>
               </View>
-              <ScrollView style={styles.modalScroll}>
+              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
                 {trips.map((t) => {
                   const isSelected = t.id === selectedTripId;
                   return (
@@ -315,10 +330,14 @@ export default function AddIndexScreen() {
                         setActiveTripId(t.id);
                         setShowTripPicker(false);
                       }}
-                      style={[
+                      style={({ pressed }) => [
                         styles.tripItem,
                         isSelected && styles.tripItemActive,
+                        pressed && styles.tripItemPressed,
                       ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select trip ${t.title}`}
+                      accessibilityState={{ selected: isSelected }}
                     >
                       <View style={styles.tripItemTextGroup}>
                         <Text
@@ -326,13 +345,16 @@ export default function AddIndexScreen() {
                             styles.tripItemTitle,
                             isSelected && styles.tripItemTitleActive,
                           ]}
-                          numberOfLines={1}
+                          numberOfLines={2}
+                          ellipsizeMode="tail"
                         >
                           {t.title}
                         </Text>
-                        <Text style={styles.tripItemDest} numberOfLines={1}>
-                          {t.destination}
-                        </Text>
+                        {t.destination?.trim() ? (
+                          <Text style={styles.tripItemDest} numberOfLines={1} ellipsizeMode="tail">
+                            📍 {t.destination.trim()}
+                          </Text>
+                        ) : null}
                       </View>
                       {isSelected && (
                         <Image
@@ -363,34 +385,34 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
   },
   headerTextGroup: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   headerTitle: {
-    fontSize: 26,
+    fontSize: 20,
     fontFamily: fontFamily.semiBold,
     fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: fontFamily.regular,
     color: colors.textMuted,
-    marginTop: 4,
+    marginTop: 1,
   },
   closeButton: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -400,8 +422,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   closeIcon: {
-    width: 18,
-    height: 18,
+    width: 15,
+    height: 15,
   },
   loadingContainer: {
     paddingVertical: spacing['3xl'],
@@ -410,48 +432,48 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: spacing.md,
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: fontFamily.regular,
     color: colors.textMuted,
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: spacing['3xl'],
-    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.lg,
     backgroundColor: colors.surface,
     borderRadius: radius.sheet,
     borderWidth: 1,
     borderColor: colors.border,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
     ...shadows.card,
   },
   emptyIconCircle: {
-    width: 68,
-    height: 68,
+    width: 56,
+    height: 56,
     borderRadius: radius.full,
     backgroundColor: `${colors.primary}15`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   emptyIcon: {
-    width: 32,
-    height: 32,
+    width: 26,
+    height: 26,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: fontFamily.semiBold,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
   emptySubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: fontFamily.regular,
     color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: spacing.xl,
+    lineHeight: 18,
+    marginBottom: spacing.lg,
   },
   createTripBtn: {
     minWidth: 180,
@@ -461,60 +483,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    marginBottom: spacing.sm,
     ...shadows.card,
   },
   tripBannerLeft: {
     flex: 1,
+    minWidth: 0,
     marginRight: spacing.sm,
+    justifyContent: 'center',
   },
   tripBannerLabel: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontFamily: fontFamily.semiBold,
     fontWeight: '700',
     color: colors.primary,
     letterSpacing: 0.6,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   tripBannerTitle: {
-    fontSize: 16,
+    fontSize: 13,
+    lineHeight: 18,
     fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   tripBannerDest: {
-    fontSize: 12,
+    fontSize: 10.5,
+    lineHeight: 15,
     fontFamily: fontFamily.regular,
     color: colors.textMuted,
     marginTop: 2,
   },
   switchTripButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    flexShrink: 0,
+    alignSelf: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: radius.full,
     backgroundColor: `${colors.primary}12`,
   },
+  switchTripButtonPressed: {
+    opacity: 0.7,
+  },
   switchTripText: {
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.primary,
   },
   optionsList: {
-    gap: spacing.md,
+    gap: 6,
   },
   optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
     ...shadows.card,
   },
   optionCardPressed: {
@@ -522,17 +555,17 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
   optionIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.button,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     backgroundColor: `${colors.primary}12`,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   optionIcon: {
-    width: 24,
-    height: 24,
+    width: 17,
+    height: 17,
   },
   optionTextContainer: {
     flex: 1,
@@ -541,36 +574,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 3,
+    marginBottom: 2,
   },
   optionTitle: {
-    fontSize: 16,
+    fontSize: 13.5,
     fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   optionTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
     borderRadius: radius.full,
     backgroundColor: colors.backgroundAlt,
   },
   optionTagText: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.textMuted,
   },
   optionSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: fontFamily.regular,
     color: colors.textMuted,
-    lineHeight: 16,
+    lineHeight: 14,
   },
   optionChevron: {
-    fontSize: 22,
+    fontSize: 16,
     color: colors.textMuted,
-    marginLeft: spacing.sm,
+    marginLeft: spacing.xs,
   },
   modalOverlay: {
     flex: 1,
@@ -626,10 +659,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tripItemTitle: {
-    fontSize: 15,
+    fontSize: 14.5,
+    lineHeight: 19,
     fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  tripItemPressed: {
+    opacity: 0.7,
   },
   tripItemTitleActive: {
     color: colors.primary,

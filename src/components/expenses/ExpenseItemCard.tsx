@@ -129,8 +129,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 6,
     ...shadows.card,
   },
   cardPressed: {
@@ -138,17 +139,17 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
   iconContainer: {
-    width: 42,
-    height: 42,
+    width: 32,
+    height: 32,
     borderRadius: radius.input,
     backgroundColor: 'rgba(44, 95, 94, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   icon: {
-    width: 20,
-    height: 20,
+    width: 16,
+    height: 16,
   },
   contentContainer: {
     flex: 1,
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: typography.cardTitle.fontFamily,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
     letterSpacing: -0.2,
@@ -168,25 +169,25 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textSecondary,
     fontWeight: '500',
   },
   metaDot: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
-    marginHorizontal: 4,
+    marginHorizontal: 3,
   },
   payerLabel: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textMuted,
   },
   notesText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 1,
     fontStyle: 'italic',
   },
   amountContainer: {
@@ -194,13 +195,13 @@ const styles = StyleSheet.create({
   },
   amountText: {
     fontFamily: typography.stat.fontFamily,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.textPrimary,
   },
   arrowText: {
     fontSize: 12,
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 1,
   },
 });

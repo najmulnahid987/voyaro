@@ -26,65 +26,65 @@ export const fontFamily = {
 export const typography = {
   display: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 32,
-    lineHeight: 38,        // 32 * 1.2
-    letterSpacing: -0.64,  // -0.02em * 32
+    fontSize: 26,
+    lineHeight: 32,        // 26 * 1.23
+    letterSpacing: -0.4,
   } satisfies TextStyle,
 
   screenTitle: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 24,
-    lineHeight: 31,        // 24 * 1.3
-    letterSpacing: -0.24,  // -0.01em * 24
+    fontSize: 20,
+    lineHeight: 26,        // 20 * 1.3
+    letterSpacing: -0.2,
   } satisfies TextStyle,
 
   sectionTitle: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 18,
-    lineHeight: 25,        // 18 * 1.4
-    letterSpacing: 0,
+    fontSize: 17,
+    lineHeight: 22,        // 17 * 1.29
+    letterSpacing: -0.1,
   } satisfies TextStyle,
 
   cardTitle: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 16,
-    lineHeight: 24,        // 16 * 1.5
+    fontSize: 14.5,
+    lineHeight: 19,        // 14.5 * 1.31
     letterSpacing: 0,
   } satisfies TextStyle,
 
   body: {
     fontFamily: fontFamily.regular,
-    fontSize: 15,
-    lineHeight: 24,        // 15 * 1.6
+    fontSize: 14,
+    lineHeight: 19,        // 14 * 1.36
     letterSpacing: 0,
   } satisfies TextStyle,
 
   bodySecondary: {
     fontFamily: fontFamily.regular,
-    fontSize: 14,
-    lineHeight: 21,        // 14 * 1.5
+    fontSize: 12.5,
+    lineHeight: 17,        // 12.5 * 1.36
     letterSpacing: 0,
   } satisfies TextStyle,
 
   label: {
     fontFamily: fontFamily.medium,
-    fontSize: 14,
-    lineHeight: 14,        // 14 * 1.0
-    letterSpacing: 0.28,   // 0.02em * 14
+    fontSize: 12.5,
+    lineHeight: 16,        // 12.5 * 1.28
+    letterSpacing: 0.2,
   } satisfies TextStyle,
 
   caption: {
     fontFamily: fontFamily.regular,
-    fontSize: 12,
-    lineHeight: 17,        // 12 * 1.4
-    letterSpacing: 0.12,   // 0.01em * 12
+    fontSize: 11,
+    lineHeight: 14,        // 11 * 1.27
+    letterSpacing: 0.1,
   } satisfies TextStyle,
 
   stat: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 20,
-    lineHeight: 24,        // 20 * 1.2
-    letterSpacing: -0.2,   // -0.01em * 20
+    fontSize: 17,
+    lineHeight: 21,        // 17 * 1.24
+    letterSpacing: -0.15,
   } satisfies TextStyle,
 } as const;
 

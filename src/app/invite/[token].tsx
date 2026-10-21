@@ -169,10 +169,9 @@ export default function InviteAcceptanceScreen() {
         {/* Invitation Card */}
         <View style={styles.inviteCard}>
           <Text style={styles.inviteOverline}>YOU ARE INVITED TO JOIN</Text>
-          <Text style={styles.tripTitle}>{tripTitle || 'Trip'}</Text>
-          {tripDestination && (
+          {tripDestination ? (
             <Text style={styles.tripDestination}>{tripDestination}</Text>
-          )}
+          ) : null}
 
           <View style={styles.divider} />
 

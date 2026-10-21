@@ -113,7 +113,6 @@ export default function AddActivityScreen() {
     const cached = getCachedTrips();
     return cached && cached.length > 0 ? cached[0].id : '';
   });
-  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
 
   // Asynchronously load item for edit mode if not already in cache
   useEffect(() => {
@@ -390,12 +389,12 @@ export default function AddActivityScreen() {
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>
-                {isEditMode ? 'Edit activity' : 'Add activity'}
+                {isEditMode ? 'Edit Activity' : 'Add Activity'}
               </Text>
               <Text style={styles.headerSubtitle}>
                 {isEditMode
                   ? 'Update details, schedule, or notes.'
-                  : 'Enter details manually or plan your exploration.'}
+                  : 'Plan your tours, sightseeing, and scheduled experiences.'}
               </Text>
             </View>
 
@@ -422,53 +421,6 @@ export default function AddActivityScreen() {
               <Text style={styles.errorBannerText}>{errors.submit}</Text>
             </View>
           ) : null}
-
-          {/* ── Trip Selector (if user has multiple trips or no trip passed) ── */}
-          {userTrips.length > 0 && !isEditMode && (
-            <View style={styles.section}>
-              <Text style={styles.inputLabel}>Trip</Text>
-              <Pressable
-                onPress={() => setShowTripDropdown((prev) => !prev)}
-                style={styles.selectTrigger}
-                accessibilityRole="button"
-                accessibilityLabel="Select trip"
-              >
-                <View style={styles.selectTriggerLeft}>
-                  <Text style={styles.selectTriggerText} numberOfLines={1}>
-                    {userTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
-                  </Text>
-                </View>
-                <Text style={styles.selectTriggerArrow}>▼</Text>
-              </Pressable>
-
-              {showTripDropdown && (
-                <View style={styles.dropdownMenu}>
-                  {userTrips.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => {
-                        setSelectedTripId(t.id);
-                        setShowTripDropdown(false);
-                      }}
-                      style={[
-                        styles.dropdownItem,
-                        selectedTripId === t.id && styles.dropdownItemActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          selectedTripId === t.id && styles.dropdownItemTextActive,
-                        ]}
-                      >
-                        {t.title}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
 
           {/* ── 2. Activity Details Section ──────────────────────────────── */}
           <View style={styles.section}>
@@ -807,8 +759,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 800,
     alignSelf: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
   },
 
   // --- Header ---
@@ -816,30 +768,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
   headerTextGroup: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   headerTitle: {
     fontFamily: typography.screenTitle.fontFamily,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
-    letterSpacing: -0.28,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    letterSpacing: -0.2,
     color: colors.textPrimary,
   },
   headerSubtitle: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   closeButton: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -862,20 +814,20 @@ const styles = StyleSheet.create({
 
   // --- Section Common ---
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     color: colors.textMuted,
-    marginBottom: spacing.sm,
+    marginBottom: 6,
   },
   cardContainer: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    padding: spacing.lg,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -886,24 +838,24 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   fieldDivider: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    marginTop: spacing.sm + 2,
+    paddingTop: spacing.sm + 2,
     borderTopWidth: 1,
     borderTopColor: colors.backgroundAlt,
   },
   twoColumnRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   flexColumn: {
     flex: 1,
   },
   inputLabel: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginBottom: 3,
   },
   optionalLabel: {
     fontFamily: fontFamily.regular,
@@ -911,12 +863,12 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   inputWrapper: {
-    height: 48,
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderWidth: 1,
     borderColor: colors.transparent,
   },
@@ -924,42 +876,42 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   inputIconBox: {
-    marginRight: spacing.sm,
+    marginRight: spacing.xs + 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inputIcon: {
-    width: 16,
-    height: 16,
+    width: 15,
+    height: 15,
   },
   textInput: {
     flex: 1,
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
+    fontSize: 13.5,
     color: colors.textPrimary,
     paddingVertical: 0,
   },
   errorText: {
     fontFamily: fontFamily.regular,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.error,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
 
   // --- Category Pills ---
   categoryScrollView: {
-    marginHorizontal: -spacing.lg,
-    paddingHorizontal: spacing.lg,
+    marginHorizontal: -spacing.md,
+    paddingHorizontal: spacing.md,
   },
   categoryScrollContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs + 2,
-    paddingVertical: spacing.xs,
+    paddingVertical: 2,
   },
   categoryPill: {
-    paddingVertical: 7,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
     borderRadius: radius.full,
     backgroundColor: colors.backgroundAlt,
     borderWidth: 1,
@@ -975,7 +927,7 @@ const styles = StyleSheet.create({
   },
   categoryPillText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '500',
     color: colors.textPrimary,
   },
@@ -988,24 +940,24 @@ const styles = StyleSheet.create({
   // --- Notes ---
   notesInput: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textPrimary,
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.input,
-    padding: spacing.md,
-    minHeight: 80,
+    padding: 10,
+    minHeight: 70,
   },
 
   // --- Itinerary Preview ---
   previewSectionHeader: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '600',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     color: colors.textMuted,
     textAlign: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   timelinePreviewWrapper: {
     position: 'relative',
@@ -1022,15 +974,15 @@ const styles = StyleSheet.create({
   },
   timelineMockRow: {
     position: 'relative',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   timelineMockDot: {
     position: 'absolute',
     left: -(spacing.xl + 4) + 6,
     top: 4,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.border,
     borderWidth: 2,
     borderColor: colors.background,
@@ -1039,27 +991,27 @@ const styles = StyleSheet.create({
     paddingLeft: spacing.sm,
   },
   timelineMockTime: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     color: colors.textMuted,
   },
   timelineMockTitle: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textSecondary,
     marginTop: 1,
   },
   timelineActiveRow: {
     position: 'relative',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   timelineActiveDot: {
     position: 'absolute',
     left: -(spacing.xl + 4) + 4,
-    top: 20,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    top: 18,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: colors.primary,
     borderWidth: 3,
     borderColor: colors.surface,
@@ -1068,8 +1020,8 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    padding: spacing.md,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -1081,58 +1033,58 @@ const styles = StyleSheet.create({
   },
   previewCardInfo: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   previewTimeText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: colors.primary,
     marginBottom: 2,
   },
   previewTitleText: {
     fontFamily: typography.cardTitle.fontFamily,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 14.5,
+    lineHeight: 19,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   previewLocationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 3,
     gap: 3,
   },
   previewLocationIcon: {
-    width: 12,
-    height: 12,
+    width: 11,
+    height: 11,
   },
   previewLocationText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textSecondary,
   },
   previewIconBox: {
-    width: 44,
-    height: 44,
+    width: 34,
+    height: 34,
     borderRadius: radius.input,
     backgroundColor: colors.primarySurface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   previewCategoryIcon: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
   },
 
   // --- Actions ---
   actionsSection: {
     flexDirection: 'column',
     gap: spacing.sm,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   primarySubmitButton: {
-    height: 52,
+    height: 44,
     backgroundColor: colors.primary,
     borderRadius: radius.button,
     alignItems: 'center',
@@ -1141,12 +1093,12 @@ const styles = StyleSheet.create({
   },
   primarySubmitButtonText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
   },
   cancelButton: {
-    height: 48,
+    height: 40,
     backgroundColor: colors.transparent,
     borderRadius: radius.button,
     alignItems: 'center',
@@ -1154,14 +1106,14 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.textSecondary,
   },
   errorBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
     backgroundColor: 'rgba(176, 74, 74, 0.10)',
     borderRadius: radius.card,
     borderWidth: 1,
@@ -1169,60 +1121,8 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     ...typography.body,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.error,
     textAlign: 'center',
-  },
-  selectTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    height: 48,
-    marginTop: spacing.xs,
-  },
-  selectTriggerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  selectTriggerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  selectTriggerArrow: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
-  dropdownMenu: {
-    marginTop: spacing.xs,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    overflow: 'hidden',
-    ...shadows.sheet,
-  },
-  dropdownItem: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  dropdownItemActive: {
-    backgroundColor: 'rgba(44, 95, 94, 0.08)',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  dropdownItemTextActive: {
-    color: colors.primary,
-    fontWeight: '600',
   },
 });

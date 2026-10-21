@@ -260,11 +260,11 @@ export function CategoryBreakdownCard({
 const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md + 2,
-    marginBottom: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
     ...shadows.card,
   },
 
@@ -273,14 +273,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm + 2,
   },
   headerTitleGroup: {
     flex: 1,
   },
   headerTitle: {
     fontFamily: typography.sectionTitle.fontFamily,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.textPrimary,
     letterSpacing: -0.2,
@@ -327,9 +327,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.primarySurface,
-    borderRadius: radius.input,
+    borderRadius: 10,
     padding: spacing.md - 2,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm + 2,
     gap: spacing.sm,
     borderWidth: 1,
     borderColor: 'rgba(44, 95, 94, 0.15)',

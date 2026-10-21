@@ -110,7 +110,7 @@ export default function TravelStyleScreen() {
           <View style={styles.headerSection}>
             <Text style={styles.title}>What kind of traveler are you?</Text>
             <Text style={styles.subtitle}>
-              We tailor your recommendations based on who you're exploring the world with.
+              {"We tailor your recommendations based on who you're exploring the world with."}
             </Text>
           </View>
 

@@ -205,6 +205,33 @@ export function VoyaroMapView({
       70% { box-shadow: 0 0 0 14px rgba(32, 138, 239, 0); }
       100% { box-shadow: 0 0 0 0 rgba(32, 138, 239, 0); }
     }
+    .leaflet-top.leaflet-left {
+      top: 54px;
+      left: 10px;
+    }
+    .leaflet-bar {
+      border: 1px solid rgba(44, 95, 94, 0.15) !important;
+      border-radius: 10px !important;
+      overflow: hidden !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+    }
+    .leaflet-bar a {
+      background-color: #ffffff !important;
+      color: #2c5f5e !important;
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      border-bottom: 1px solid rgba(44, 95, 94, 0.1) !important;
+    }
+    .leaflet-bar a:last-child {
+      border-bottom: none !important;
+    }
+    .leaflet-bar a:hover, .leaflet-bar a:active {
+      background-color: #f4f3f3 !important;
+      color: #1e4241 !important;
+    }
   </style>
 </head>
 <body>

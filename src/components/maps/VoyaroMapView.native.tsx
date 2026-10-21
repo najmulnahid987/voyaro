@@ -174,6 +174,33 @@ function AndroidLeafletMapView({
       70% { box-shadow: 0 0 0 14px rgba(32, 138, 239, 0); }
       100% { box-shadow: 0 0 0 0 rgba(32, 138, 239, 0); }
     }
+    .leaflet-top.leaflet-left {
+      top: 54px;
+      left: 10px;
+    }
+    .leaflet-bar {
+      border: 1px solid rgba(44, 95, 94, 0.15) !important;
+      border-radius: 10px !important;
+      overflow: hidden !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12) !important;
+    }
+    .leaflet-bar a {
+      background-color: #ffffff !important;
+      color: #2c5f5e !important;
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      font-size: 16px !important;
+      font-weight: 600 !important;
+      border-bottom: 1px solid rgba(44, 95, 94, 0.1) !important;
+    }
+    .leaflet-bar a:last-child {
+      border-bottom: none !important;
+    }
+    .leaflet-bar a:hover, .leaflet-bar a:active {
+      background-color: #f4f3f3 !important;
+      color: #1e4241 !important;
+    }
   </style>
 </head>
 <body>
@@ -332,12 +359,7 @@ function AndroidLeafletMapView({
  * - On Android (Expo Go / unconfigured Google Maps key): Seamlessly renders the high-performance Leaflet WebView engine with zero API keys.
  * - On iOS: Natively renders Apple Maps with GPU acceleration.
  */
-export function VoyaroMapView(props: VoyaroMapViewProps) {
-  // On Android, use the keyless, high-performance WebView engine so Expo Go works immediately
-  if (Platform.OS === 'android') {
-    return <AndroidLeafletMapView {...props} />;
-  }
-
+function IOSAppleMapView(props: VoyaroMapViewProps) {
   // On iOS, use native Apple Maps (no API key required)
   const {
     initialRegion,
@@ -506,6 +528,18 @@ export function VoyaroMapView(props: VoyaroMapViewProps) {
       )}
     </View>
   );
+}
+
+/**
+ * Universal Native Map Component:
+ * - On Android (Expo Go / unconfigured Google Maps key): Seamlessly renders the high-performance Leaflet WebView engine with zero API keys.
+ * - On iOS: Natively renders Apple Maps with GPU acceleration.
+ */
+export function VoyaroMapView(props: VoyaroMapViewProps) {
+  if (Platform.OS === 'android') {
+    return <AndroidLeafletMapView {...props} />;
+  }
+  return <IOSAppleMapView {...props} />;
 }
 
 const styles = StyleSheet.create({

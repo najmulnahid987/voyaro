@@ -16,17 +16,11 @@ import { Trip, getTripById as getDevMockTripById } from '@/services/mockData';
 import { fetchTripById, getActiveTripId, getCachedTrips, setActiveTripId } from '@/services/trip';
 import { useItinerary } from '@/services/itineraryStore';
 import {
-  formatItineraryTime,
   groupItemsByDay,
   parseDate,
 } from '@/utils/itineraryDateUtils';
 import { useShellInsets } from '@/components/navigation';
-import {
-  ConcreteItineraryItem,
-  FlightMetadata,
-  HotelMetadata,
-  TransportationMetadata,
-} from '@/types/itinerary';
+import { ConcreteItineraryItem } from '@/types/itinerary';
 import { ItineraryItemCard } from '@/components/itinerary';
 
 /**
@@ -122,73 +116,6 @@ export default function TripItineraryScreen() {
 
   const handleAddPress = () => {
     router.push({ pathname: '/add', params: { tripId: effectiveTripId } });
-  };
-
-  // 4. Helper to get category label from item
-  const getItemCategoryLabel = (item: ConcreteItineraryItem): string => {
-    switch (item.type) {
-      case 'flight':
-        return 'Flight';
-      case 'hotel':
-        return 'Hotel Check-in';
-      case 'activity':
-        return item.metadata?.category || 'Explore';
-      case 'transportation': {
-        const transType = (item.metadata as TransportationMetadata)
-          ?.transportationType;
-        if (transType === 'train') return 'Train';
-        if (transType === 'rental_car') return 'Rental Car';
-        if (transType === 'ferry') return 'Ferry';
-        if (transType === 'bus') return 'Bus';
-        return 'Transport';
-      }
-      default:
-        return 'Event';
-    }
-  };
-
-  // 5. Helper to get item subtitle / route detail
-  const getItemSubtitle = (item: ConcreteItineraryItem): string => {
-    switch (item.type) {
-      case 'flight': {
-        const meta = item.metadata as FlightMetadata;
-        if (meta?.airline && meta?.flightNumber) {
-          return `${meta.airline} · ${meta.flightNumber}`;
-        }
-        return meta?.airline || meta?.flightNumber || item.location || '';
-      }
-      case 'hotel': {
-        const meta = item.metadata as HotelMetadata;
-        return meta?.room || meta?.address || item.location || 'Kyoto';
-      }
-      case 'activity': {
-        return item.location || 'Tokyo';
-      }
-      case 'transportation': {
-        const meta = item.metadata as TransportationMetadata;
-        if (meta?.from && meta?.to) {
-          return `${meta.from} → ${meta.to}`;
-        }
-        return meta?.provider || item.location || '';
-      }
-      default:
-        return '';
-    }
-  };
-
-  // 6. Helper to get item icon
-  const getItemIcon = (type: string) => {
-    switch (type) {
-      case 'flight':
-        return require('@/assets/images/icons/flight.svg');
-      case 'hotel':
-        return require('@/assets/images/icons/hotel.svg');
-      case 'activity':
-        return require('@/assets/images/icons/landscape.svg');
-      case 'transportation':
-      default:
-        return require('@/assets/images/onboarding/flight-takeoff.svg');
-    }
   };
 
   return (
@@ -310,33 +237,24 @@ export default function TripItineraryScreen() {
 
                     {/* Day Events List */}
                     <View style={styles.dayEventsList}>
-                      {group.items.map((item) => {
-                        const timeString = formatItineraryTime(
-                          item.startDateTime
-                        );
-                        const categoryLabel = getItemCategoryLabel(item);
-                        const subtitle = getItemSubtitle(item);
-                        const iconSource = getItemIcon(item.type);
-
-                        return (
-                          <View key={item.id} style={styles.eventRow}>
-                            {/* Left column: Timeline node dot */}
-                            <View style={styles.eventDotColumn}>
-                              <View style={styles.eventDotRing}>
-                                <View style={styles.eventDotCenter} />
-                              </View>
+                      {group.items.map((item) => (
+                        <View key={item.id} style={styles.eventRow}>
+                          {/* Left column: Timeline node dot */}
+                          <View style={styles.eventDotColumn}>
+                            <View style={styles.eventDotRing}>
+                              <View style={styles.eventDotCenter} />
                             </View>
-
-                            {/* Right column: Card */}
-                            <ItineraryItemCard
-                              item={item}
-                              onPress={() => handleItemPress(item.id)}
-                              showConfirmation={true}
-                              style={styles.cardFlex}
-                            />
                           </View>
-                        );
-                      })}
+
+                          {/* Right column: Card */}
+                          <ItineraryItemCard
+                            item={item}
+                            onPress={() => handleItemPress(item.id)}
+                            showConfirmation={true}
+                            style={styles.cardFlex}
+                          />
+                        </View>
+                      ))}
                     </View>
                   </View>
                 );
@@ -465,14 +383,14 @@ const styles = StyleSheet.create({
   // --- Timeline Layout ---
   timelineSection: {
     position: 'relative',
-    paddingHorizontal: spacing.xl,
-    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.xs,
   },
   timelineContinuousLine: {
     position: 'absolute',
-    top: 20,
+    top: 14,
     bottom: 0,
-    left: spacing.xl + 19, // Centers inside the 40px left circle (20px margin + 20px center - 1px line width)
+    left: spacing.md + 13, // Centers inside the 28px left circle (12px margin + 14px center - 1px line width)
     width: 2,
     backgroundColor: colors.border,
     zIndex: 0,
@@ -482,29 +400,29 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   dayGroupSpacing: {
-    marginTop: spacing['3xl'], // 32px between days
+    marginTop: spacing.md, // 12px between days
   },
   dayHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
+    gap: 8,
+    marginBottom: 6,
   },
   dayCircleBadge: {
-    width: 40,
-    height: 40,
+    width: 28,
+    height: 28,
     borderRadius: radius.full,
-    backgroundColor: colors.backgroundAlt,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
   dayCircleBadgeText: {
-    fontFamily: typography.sectionTitle.fontFamily,
-    fontSize: 18,
-    fontWeight: '600',
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   dayHeaderInfo: {
@@ -512,110 +430,55 @@ const styles = StyleSheet.create({
   },
   dayMonthLabel: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '600',
-    letterSpacing: 1.2,
-    color: colors.textMuted,
+    letterSpacing: 0.6,
+    color: colors.primary,
   },
   dayWeekdayLabel: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
+    fontSize: 12.5,
+    fontWeight: '500',
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: 0,
   },
 
   // --- Event Rows ---
   dayEventsList: {
     flexDirection: 'column',
-    gap: spacing.md,
+    gap: 8,
   },
   eventRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.md,
+    gap: 6,
   },
   eventDotColumn: {
-    width: 40,
+    width: 28,
     alignItems: 'center',
-    paddingTop: spacing.lg, // Aligns dot vertically with top of card
+    paddingTop: 12, // Centers dot at 17px, matching the card's top header row
     zIndex: 2,
   },
   eventDotRing: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.background,
   },
   eventDotCenter: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 4.5,
+    height: 4.5,
+    borderRadius: 2.25,
     backgroundColor: colors.primary,
   },
 
   cardFlex: {
     flex: 1,
-  },
-  // --- Item Card ---
-  itemCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    ...shadows.card,
-  },
-  cardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.98 }],
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  cardCategoryLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    color: colors.textMuted,
-  },
-  cardTimeLabel: {
-    fontFamily: typography.label.fontFamily,
-    fontSize: 13,
-    fontWeight: '500',
-    color: colors.textMuted,
-  },
-  cardTitleText: {
-    fontFamily: typography.cardTitle.fontFamily,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  cardMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs + 2,
-    marginTop: 2,
-  },
-  cardMetaIcon: {
-    width: 14,
-    height: 14,
-  },
-  cardSubtitleText: {
-    fontFamily: typography.caption.fontFamily,
-    fontSize: 13,
-    color: colors.textSecondary,
-    flex: 1,
+    minWidth: 0,
   },
 
   // --- Empty State ---

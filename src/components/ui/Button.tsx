@@ -159,19 +159,20 @@ export function Button({
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
   base: {
-    height: 52,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.button,
-    paddingHorizontal: spacing.xl,
+    paddingHorizontal: spacing.lg,
     overflow: 'hidden',
   },
   fullWidth: {
     width: '100%',
   },
   iconOnly: {
-    width: 52,
+    width: 44,
+    height: 44,
     paddingHorizontal: 0,
     borderRadius: radius.button,
   },

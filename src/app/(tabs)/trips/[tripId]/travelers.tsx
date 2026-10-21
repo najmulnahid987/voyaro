@@ -12,9 +12,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { Avatar, Badge, Button, IconButton } from '@/components/ui';
 import { fetchTripById } from '@/services/trip';
 import {
@@ -27,8 +26,9 @@ import {
   getInvitationUrl,
   subscribeToTripCollaboration,
 } from '@/services/collaboration';
-import { Traveler, Trip } from '@/services/mockData';
+import { Traveler, Trip, getTripById } from '@/services/mockData';
 import { DomainTripInvitation } from '@/services/mappers';
+import { useShellInsets } from '@/components/navigation';
 
 /**
  * Route: /(tabs)/trips/[tripId]/travelers — Trip Members UI (Phase 8 — Step 6)
@@ -42,8 +42,20 @@ import { DomainTripInvitation } from '@/services/mappers';
  *  - Owner actions: Change role (Editor <-> Viewer), Remove member, Revoke invitation
  *  - Member actions: View members, Leave trip (non-owners)
  */
+function formatExpiresIn(expiresAtStr: string) {
+  try {
+    const diffMs = new Date(expiresAtStr).getTime() - Date.now();
+    if (diffMs <= 0) return 'Expired';
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    return `Expires in ${days} ${days === 1 ? 'day' : 'days'}`;
+  } catch {
+    return 'Expires soon';
+  }
+}
+
 export default function TripTravelersScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [members, setMembers] = useState<Traveler[]>([]);
@@ -61,7 +73,11 @@ export default function TripTravelersScreen() {
 
     try {
       setError(null);
-      const fetchedTrip = await fetchTripById(tripId);
+      let fetchedTrip = await fetchTripById(tripId);
+
+      if (!fetchedTrip) {
+        fetchedTrip = getTripById(tripId) || (tripId === '[id]' ? getTripById('demo-trip') : null) || null;
+      }
 
       if (!fetchedTrip) {
         setError('Trip not found or you do not have permission to view it.');
@@ -79,7 +95,11 @@ export default function TripTravelersScreen() {
         listTripInvitations(tripId),
       ]);
 
-      setMembers(fetchedMembers);
+      setMembers(
+        fetchedMembers && fetchedMembers.length > 0
+          ? fetchedMembers
+          : (fetchedTrip.travelers || [])
+      );
 
       // Filter to active, non-expired invitations
       const now = new Date();
@@ -252,81 +272,92 @@ export default function TripTravelersScreen() {
     );
   };
 
-  const formatExpiresIn = (expiresAtStr: string) => {
-    try {
-      const diffMs = new Date(expiresAtStr).getTime() - Date.now();
-      if (diffMs <= 0) return 'Expired';
-      const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-      return `Expires in ${days} ${days === 1 ? 'day' : 'days'}`;
-    } catch {
-      return 'Expires soon';
-    }
-  };
-
   // ---------------------------------------------------------------------------
   // Render States: Loading & Error
   // ---------------------------------------------------------------------------
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View
+        style={[
+          styles.screen,
+          {
+            paddingTop: contentPaddingTop + spacing.lg,
+            paddingBottom: contentPaddingBottom + spacing.xl,
+          },
+        ]}
+      >
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading travelers...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (error || !trip) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <View style={styles.navBar}>
-          <IconButton
-            variant="ghost"
-            size="sm"
-            onPress={() => router.back()}
-            icon={
-              <Image
-                source={require('@/assets/images/arrow-left.svg')}
-                style={styles.navIcon}
-                contentFit="contain"
-              />
-            }
-            accessibilityLabel="Go back"
-          />
-          <Text style={styles.navTitle}>Travelers</Text>
-          <View style={styles.navRightPlaceholder} />
-        </View>
+      <View style={styles.screen}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: contentPaddingTop + spacing.lg,
+              paddingBottom: contentPaddingBottom + spacing['2xl'] + spacing.lg,
+              flexGrow: 1,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.container}>
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+                hitSlop={8}
+              >
+                <Text style={styles.backArrow}>←</Text>
+              </Pressable>
+              <Text style={styles.topBarTitle}>Travelers</Text>
+              <View style={styles.topBarSpacer} />
+            </View>
 
-        <View style={styles.errorContainer}>
-          <View style={styles.errorIconCircle}>
-            <Image
-              source={require('@/assets/images/icons/close.svg')}
-              style={styles.errorIcon}
-              contentFit="contain"
-            />
+            <View style={styles.errorContainer}>
+              <View style={styles.errorIconCircle}>
+                <Image
+                  source={require('@/assets/images/icons/close.svg')}
+                  style={styles.errorIcon}
+                  contentFit="contain"
+                />
+              </View>
+              <Text style={styles.errorTitle}>Unable to View Travelers</Text>
+              <Text style={styles.errorSubtitle}>
+                {error || 'This trip could not be found or you do not have permission to view its members.'}
+              </Text>
+              <View style={styles.errorActionsRow}>
+                <Button
+                  label="← All Trips"
+                  variant="outline"
+                  onPress={() => router.replace('/(tabs)/trips')}
+                  style={styles.errorButton}
+                />
+                <Button
+                  label="Retry"
+                  variant="primary"
+                  onPress={loadData}
+                  style={styles.errorButton}
+                />
+              </View>
+            </View>
           </View>
-          <Text style={styles.errorTitle}>Unable to View Travelers</Text>
-          <Text style={styles.errorSubtitle}>
-            {error || 'This trip could not be found or you do not have permission to view its members.'}
-          </Text>
-          <View style={styles.errorActionsRow}>
-            <Button
-              label="← All Trips"
-              variant="outline"
-              onPress={() => router.replace('/(tabs)/trips')}
-              style={styles.errorButton}
-            />
-            <Button
-              label="Retry"
-              variant="primary"
-              onPress={loadData}
-              style={styles.errorButton}
-            />
-          </View>
-        </View>
-      </SafeAreaView>
+        </ScrollView>
+      </View>
     );
   }
 
@@ -335,49 +366,62 @@ export default function TripTravelersScreen() {
   const coTravelers = members.filter((m) => m.role !== 'owner');
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View style={styles.navBar}>
-        <IconButton
-          variant="ghost"
-          size="sm"
-          onPress={() => router.back()}
-          icon={
-            <Image
-              source={require('@/assets/images/arrow-left.svg')}
-              style={styles.navIcon}
-              contentFit="contain"
-            />
-          }
-          accessibilityLabel="Go back"
-        />
-        <Text style={styles.navTitle}>Travelers</Text>
-        <Pressable
-          onPress={handleShareTripPress}
-          style={styles.inviteHeaderButton}
-          accessibilityRole="button"
-          accessibilityLabel={isOwner ? 'Invite traveler' : 'Share trip'}
-        >
-          <Text style={styles.inviteHeaderButtonText}>
-            {isOwner ? '+ Invite' : '↗ Share'}
-          </Text>
-        </Pressable>
-      </View>
-
+    <View style={styles.screen}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: contentPaddingTop + spacing.lg,
+            paddingBottom: contentPaddingBottom + spacing['2xl'] + spacing.lg,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={colors.primary}
+            progressViewOffset={contentPaddingTop + spacing.sm}
           />
         }
       >
-        {/* Header Summary Card */}
-        <View style={styles.summaryCard}>
+        <View style={styles.container}>
+          {/* Top Sub-Navigation Bar */}
+          <View style={styles.topBar}>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.iconCircleButton,
+                pressed && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+              hitSlop={8}
+            >
+              <Text style={styles.backArrow}>←</Text>
+            </Pressable>
+
+            <Text style={styles.topBarTitle}>Travelers</Text>
+
+            <Pressable
+              onPress={handleShareTripPress}
+              style={({ pressed }) => [
+                styles.inviteHeaderButton,
+                pressed && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={isOwner ? 'Invite traveler' : 'Share trip'}
+              hitSlop={8}
+            >
+              <Text style={styles.inviteHeaderButtonText}>
+                {isOwner ? '+ Invite' : '↗ Share'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Header Summary Card */}
+          <View style={styles.summaryCard}>
           <View style={styles.summaryTopRow}>
             <Text style={styles.tripCategoryBadge}>
               {trip.status?.toUpperCase() || 'UPCOMING'} TRIP
@@ -620,15 +664,72 @@ export default function TripTravelersScreen() {
             />
           </View>
         )}
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 500,
+    alignSelf: 'center',
+    gap: spacing.md,
+  },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: 2,
+  },
+  topBarTitle: {
+    fontFamily: typography.sectionTitle.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  topBarSpacer: {
+    width: 32,
+  },
+  iconCircleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  backArrow: {
+    fontSize: 16,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  buttonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
+  },
+  inviteHeaderButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.full,
+    backgroundColor: colors.primarySurface,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  inviteHeaderButtonText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 12,
+    color: colors.primary,
+    fontWeight: '600',
   },
   centered: {
     flex: 1,
@@ -641,56 +742,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  navTitle: {
-    ...typography.sectionTitle,
-    fontSize: 17,
-    color: colors.textPrimary,
-  },
-  navIcon: {
-    width: 20,
-    height: 20,
-    tintColor: colors.textPrimary,
-  },
-  inviteHeaderButton: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-    backgroundColor: colors.primarySurface,
-  },
-  inviteHeaderButtonText: {
-    ...typography.caption,
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '600',
-  },
-  navRightPlaceholder: {
-    width: 48,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.md,
-    gap: spacing.lg,
-    paddingBottom: spacing['2xl'],
+    paddingHorizontal: spacing.md,
   },
   summaryCard: {
     backgroundColor: colors.surface,
-    padding: spacing.lg,
-    borderRadius: radius.card,
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     gap: spacing.xs,
+    ...shadows.card,
   },
   summaryTopRow: {
     flexDirection: 'row',

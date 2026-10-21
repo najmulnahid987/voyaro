@@ -1,6 +1,12 @@
+/**
+ * Route: /(tabs)/profile/account — Account Details Screen
+ *
+ * Provides display name editing, avatar preset selection, and custom image URL.
+ * Sits inside the persistent navigation shell with proper top/bottom insets.
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,10 +17,10 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Avatar, Button, IconButton, Input } from '@/components/ui';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { Avatar, Button, Input } from '@/components/ui';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { useAuth } from '@/services/AuthContext';
+import { useShellInsets } from '@/components/navigation';
 
 const PRESET_AVATARS = [
   { label: 'Mountain', url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80' },
@@ -24,6 +30,7 @@ const PRESET_AVATARS = [
 ];
 
 export default function AccountScreen() {
+  const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
   const { profile, user, updateProfile } = useAuth();
   const [displayName, setDisplayName] = useState(profile?.displayName || user?.name || '');
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatarUrl || '');
@@ -78,39 +85,46 @@ export default function AccountScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <View style={styles.screen}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Top App Bar */}
-        <View style={styles.navBar}>
-          <IconButton
-            variant="ghost"
-            size="sm"
-            onPress={() => router.back()}
-            icon={
-              <Image
-                source={require('@/assets/images/arrow-left.svg')}
-                style={styles.navIcon}
-                contentFit="contain"
-              />
-            }
-            accessibilityLabel="Go back"
-          />
-          <Text style={styles.navTitle}>Account Details</Text>
-          <View style={styles.navPlaceholder} />
-        </View>
-
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: contentPaddingTop,
+              paddingBottom: contentPaddingBottom + spacing.xl,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.container}>
+            {/* Top Sub-Navigation Bar */}
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                hitSlop={8}
+              >
+                <Text style={styles.backArrow}>←</Text>
+              </Pressable>
+
+              <Text style={styles.topBarTitle}>Account Details</Text>
+
+              <View style={styles.topBarSpacer} />
+            </View>
+
             {/* Success Banner */}
-            {successBanner && (
+            {successBanner ? (
               <View style={styles.successBanner}>
                 <Image
                   source={require('@/assets/images/onboarding/check.svg')}
@@ -121,17 +135,17 @@ export default function AccountScreen() {
                   Account details updated successfully!
                 </Text>
               </View>
-            )}
+            ) : null}
 
             {/* Error Banner */}
-            {errorMessage && (
+            {errorMessage ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{errorMessage}</Text>
               </View>
-            )}
+            ) : null}
 
             {/* Avatar Preview Section */}
-            <View style={styles.avatarCard}>
+            <View style={styles.card}>
               <Text style={styles.sectionHeader}>PROFILE PICTURE</Text>
               <View style={styles.avatarCentered}>
                 <Avatar
@@ -163,7 +177,7 @@ export default function AccountScreen() {
                           style={styles.presetThumb}
                           contentFit="cover"
                         />
-                        {isSelected && (
+                        {isSelected ? (
                           <View style={styles.presetCheck}>
                             <Image
                               source={require('@/assets/images/onboarding/check.svg')}
@@ -171,7 +185,7 @@ export default function AccountScreen() {
                               contentFit="contain"
                             />
                           </View>
-                        )}
+                        ) : null}
                       </Pressable>
                     );
                   })}
@@ -206,33 +220,34 @@ export default function AccountScreen() {
             </View>
 
             {/* Personal Details Card */}
-            <View style={styles.formCard}>
+            <View style={styles.card}>
               <Text style={styles.sectionHeader}>PERSONAL DETAILS</Text>
-              <Input
-                label="Display Name"
-                placeholder="Jane Doe"
-                value={displayName}
-                onChangeText={(val) => {
-                  setDisplayName(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                autoCapitalize="words"
-                autoCorrect={false}
-              />
+              <View style={styles.formFields}>
+                <Input
+                  label="Display Name"
+                  placeholder="Jane Doe"
+                  value={displayName}
+                  onChangeText={(val) => {
+                    setDisplayName(val);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
 
-              <Input
-                label="Email Address"
-                value={profile?.email || user?.email || ''}
-                editable={false}
-                helperText="Email address is managed by Supabase Authentication"
-              />
+                <Input
+                  label="Email Address"
+                  value={profile?.email || user?.email || ''}
+                  editable={false}
+                  helperText="Managed by authentication provider"
+                />
+              </View>
             </View>
 
             {/* Save CTA */}
             <Button
               variant="primary"
-              label="Save Changes"
-              fullWidth
+              label={loading ? 'Saving Changes...' : 'Save Changes'}
               loading={loading}
               onPress={handleSave}
               style={styles.saveButton}
@@ -240,135 +255,151 @@ export default function AccountScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
   keyboardView: {
     flex: 1,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  navIcon: {
-    width: 20,
-    height: 20,
-  },
-  navTitle: {
-    ...typography.sectionTitle,
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  navPlaceholder: {
-    width: 36,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   container: {
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 500,
     alignSelf: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
+  },
+
+  // ── Top Navigation Bar ───────────────────────────────────────────────────
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: 2,
+  },
+  topBarTitle: {
+    fontFamily: typography.sectionTitle.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  topBarSpacer: {
+    width: 32,
+  },
+  iconCircleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  backArrow: {
+    fontSize: 16,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  buttonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.96 }],
   },
 
   // ── Banners ──────────────────────────────────────────────────────────────
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(44, 95, 94, 0.12)',
+    gap: spacing.xs + 2,
+    backgroundColor: 'rgba(44, 95, 94, 0.10)',
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: radius.button,
-    padding: spacing.md,
+    borderRadius: radius.input,
+    padding: spacing.sm,
   },
   bannerCheckIcon: {
-    width: 16,
-    height: 16,
+    width: 14,
+    height: 14,
     tintColor: colors.primary,
   },
   successBannerText: {
-    ...typography.label,
-    fontSize: 14,
+    fontFamily: fontFamily.medium,
+    fontSize: 12.5,
     color: colors.primary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   errorBanner: {
-    backgroundColor: 'rgba(176, 74, 74, 0.10)',
-    borderRadius: radius.button,
-    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.08)',
+    borderRadius: radius.input,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: colors.error,
   },
   errorBannerText: {
-    ...typography.caption,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
     color: colors.error,
     fontWeight: '500',
     textAlign: 'center',
   },
 
   // ── Cards ────────────────────────────────────────────────────────────────
-  avatarCard: {
+  card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.xl,
+    padding: 12,
     ...shadows.card,
   },
   sectionHeader: {
-    ...typography.caption,
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
     color: colors.textMuted,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   avatarCentered: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: spacing.sm,
+    marginVertical: spacing.xs,
   },
   presetSection: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.sm + 2,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   presetLabel: {
-    ...typography.caption,
-    fontSize: 13,
+    fontFamily: fontFamily.medium,
+    fontSize: 11.5,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs + 2,
   },
   presetsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
     flexWrap: 'wrap',
   },
   presetItem: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     borderWidth: 2,
     borderColor: colors.border,
     overflow: 'hidden',
@@ -388,45 +419,38 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(44, 95, 94, 0.45)',
+    backgroundColor: 'rgba(44, 95, 94, 0.50)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   presetCheckIcon: {
-    width: 16,
-    height: 16,
+    width: 14,
+    height: 14,
     tintColor: colors.textOnPrimary,
   },
   clearPresetBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
     borderRadius: radius.full,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.backgroundAlt,
   },
   clearPresetText: {
-    ...typography.caption,
-    fontSize: 12,
+    fontFamily: fontFamily.medium,
+    fontSize: 11.5,
     color: colors.textSecondary,
   },
   customUrlSection: {
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
-
-  formCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
-    gap: spacing.lg,
-    ...shadows.card,
+  formFields: {
+    gap: spacing.sm + 2,
   },
 
   // ── Actions ──────────────────────────────────────────────────────────────
   saveButton: {
+    height: 44,
     marginTop: spacing.xs,
-    marginBottom: spacing.xl,
   },
 });

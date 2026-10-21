@@ -10,12 +10,12 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Badge, IconButton } from '@/components/ui';
 import { colors, radius, shadows, spacing, typography } from '@/theme';
 import { deleteTrip, fetchTripById } from '@/services/trip';
 import { leaveTrip } from '@/services/collaboration';
-import { Trip } from '@/services/mockData';
+import { Trip, getTripById } from '@/services/mockData';
+import { useShellInsets } from '@/components/navigation';
 
 /**
  * Route: /(tabs)/trips/[tripId]/settings
@@ -23,6 +23,7 @@ import { Trip } from '@/services/mockData';
  */
 export default function TripSettingsScreen() {
   const { tripId } = useLocalSearchParams<{ tripId: string }>();
+  const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -34,7 +35,12 @@ export default function TripSettingsScreen() {
       fetchTripById(tripId)
         .then((data) => {
           if (isMounted) {
-            setTrip(data);
+            const activeTrip =
+              data ||
+              getTripById(tripId) ||
+              (tripId === '[id]' ? getTripById('demo-trip') : null) ||
+              null;
+            setTrip(activeTrip);
           }
         })
         .catch((err) => {
@@ -133,42 +139,57 @@ export default function TripSettingsScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <View
+        style={[
+          styles.screen,
+          {
+            paddingTop: contentPaddingTop + spacing.lg,
+            paddingBottom: contentPaddingBottom + spacing.xl,
+          },
+        ]}
+      >
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading settings...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      {/* Top App Bar */}
-      <View style={styles.navBar}>
-        <IconButton
-          variant="ghost"
-          size="sm"
-          onPress={() => router.back()}
-          icon={
-            <Image
-              source={require('@/assets/images/arrow-left.svg')}
-              style={styles.navIcon}
-              contentFit="contain"
-            />
-          }
-          accessibilityLabel="Back to Trip Overview"
-        />
-        <Text style={styles.navTitle}>Trip Settings</Text>
-        <View style={styles.navPlaceholder} />
-      </View>
-
+    <View style={styles.screen}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: contentPaddingTop + spacing.lg,
+            paddingBottom: contentPaddingBottom + spacing['2xl'] + spacing.lg,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.container}>
+          {/* Top Sub-Navigation Bar */}
+          <View style={styles.topBar}>
+            <Pressable
+              onPress={() => router.back()}
+              style={({ pressed }) => [
+                styles.iconCircleButton,
+                pressed && styles.buttonPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Back to Trip Overview"
+              hitSlop={8}
+            >
+              <Text style={styles.backArrow}>←</Text>
+            </Pressable>
+
+            <Text style={styles.topBarTitle}>Trip Settings</Text>
+
+            <View style={styles.topBarSpacer} />
+          </View>
+
           {/* Trip Role Card */}
           <View style={styles.roleHeaderCard}>
             <View style={styles.roleHeaderInfo}>
@@ -331,12 +352,12 @@ export default function TripSettingsScreen() {
           )}
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
@@ -351,49 +372,60 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textSecondary,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  navIcon: {
-    width: 20,
-    height: 20,
-  },
-  navTitle: {
-    ...typography.sectionTitle,
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  navPlaceholder: {
-    width: 36,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   container: {
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 500,
     alignSelf: 'center',
-    gap: spacing.xl,
+    gap: spacing.md,
   },
-
-  roleHeaderCard: {
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: 2,
+  },
+  topBarTitle: {
+    fontFamily: typography.sectionTitle.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  topBarSpacer: {
+    width: 32,
+  },
+  iconCircleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  backArrow: {
+    fontSize: 16,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  buttonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
+  },
+  roleHeaderCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -414,10 +446,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
   },
-
   menuCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',

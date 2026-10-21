@@ -58,11 +58,11 @@ export function Input({
     <TouchableWithoutFeedback onPress={() => inputRef.current?.focus()}>
       <View style={containerStyle}>
         {/* Label */}
-        {label && (
+        {Boolean(label) ? (
           <Text style={styles.label} numberOfLines={1}>
             {label}
           </Text>
-        )}
+        ) : null}
 
         {/* Input row */}
         <View
@@ -95,7 +95,7 @@ export function Input({
         </View>
 
         {/* Helper / Error text */}
-        {(error || helperText) && (
+        {Boolean(error || helperText) ? (
           <Text
             style={[styles.helperText, hasError && styles.errorText]}
             numberOfLines={2}
@@ -104,7 +104,7 @@ export function Input({
           >
             {error ?? helperText}
           </Text>
-        )}
+        ) : null}
       </View>
     </TouchableWithoutFeedback>
   );
@@ -114,11 +114,11 @@ const styles = StyleSheet.create({
   label: {
     ...typography.label,
     color: colors.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xs,
   },
 
   inputContainer: {
-    height: 52,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -140,22 +140,22 @@ const styles = StyleSheet.create({
     flex: 1,
     ...typography.body,
     color: colors.textPrimary,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     // Remove default text input padding on Android
     paddingVertical: 0,
   },
   inputWithLeft: {
-    paddingLeft: spacing.sm,
+    paddingLeft: spacing.xs,
   },
   inputWithRight: {
-    paddingRight: spacing.sm,
+    paddingRight: spacing.xs,
   },
 
   iconLeft: {
-    paddingLeft: spacing.lg,
+    paddingLeft: spacing.md,
   },
   iconRight: {
-    paddingRight: spacing.lg,
+    paddingRight: spacing.md,
   },
 
   helperText: {

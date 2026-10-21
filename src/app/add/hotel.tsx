@@ -91,7 +91,6 @@ export default function AddHotelScreen() {
     const cached = getCachedTrips();
     return cached && cached.length > 0 ? cached[0].id : '';
   });
-  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
 
   // Asynchronously load item for edit mode if not already in cache
   useEffect(() => {
@@ -375,12 +374,12 @@ export default function AddHotelScreen() {
           <View style={styles.headerRow}>
             <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>
-                {isEditMode ? 'Edit hotel' : 'Add hotel'}
+                {isEditMode ? 'Edit Accommodation' : 'Add Accommodation'}
               </Text>
               <Text style={styles.headerSubtitle}>
                 {isEditMode
-                  ? 'Update reservation details, dates, or stay info.'
-                  : 'Enter reservation details manually or review your stay.'}
+                  ? 'Update stay details, dates, or booking info.'
+                  : 'Manage hotels, stays, check-in/out dates, and addresses.'}
               </Text>
             </View>
 
@@ -407,53 +406,6 @@ export default function AddHotelScreen() {
               <Text style={styles.errorBannerText}>{errors.submit}</Text>
             </View>
           ) : null}
-
-          {/* ── Trip Selector (if user has multiple trips or no trip passed) ── */}
-          {userTrips.length > 0 && !isEditMode && (
-            <View style={styles.section}>
-              <Text style={styles.inputLabel}>Trip</Text>
-              <Pressable
-                onPress={() => setShowTripDropdown((prev) => !prev)}
-                style={styles.selectTrigger}
-                accessibilityRole="button"
-                accessibilityLabel="Select trip"
-              >
-                <View style={styles.selectTriggerLeft}>
-                  <Text style={styles.selectTriggerText} numberOfLines={1}>
-                    {userTrips.find((t) => t.id === selectedTripId)?.title || 'Select Trip'}
-                  </Text>
-                </View>
-                <Text style={styles.selectTriggerArrow}>▼</Text>
-              </Pressable>
-
-              {showTripDropdown && (
-                <View style={styles.dropdownMenu}>
-                  {userTrips.map((t) => (
-                    <Pressable
-                      key={t.id}
-                      onPress={() => {
-                        setSelectedTripId(t.id);
-                        setShowTripDropdown(false);
-                      }}
-                      style={[
-                        styles.dropdownItem,
-                        selectedTripId === t.id && styles.dropdownItemActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          selectedTripId === t.id && styles.dropdownItemTextActive,
-                        ]}
-                      >
-                        {t.title}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
 
           {/* ── 2. Hotel Basics Section ──────────────────────────────────── */}
           <View style={styles.section}>
@@ -699,20 +651,20 @@ export default function AddHotelScreen() {
                 </View>
 
                 {/* Room / Confirmation details if present */}
-                {(room || confirmationNumber) && (
+                {Boolean(room.trim() || confirmationNumber.trim()) ? (
                   <View style={styles.previewFooterRow}>
-                    {room ? (
+                    {room.trim() ? (
                       <Text style={styles.previewRoomText} numberOfLines={1}>
-                        Room: {room}
+                        Room: {room.trim()}
                       </Text>
                     ) : null}
-                    {confirmationNumber ? (
+                    {confirmationNumber.trim() ? (
                       <Text style={styles.previewConfText} numberOfLines={1}>
-                        #{confirmationNumber}
+                        #{confirmationNumber.trim()}
                       </Text>
                     ) : null}
                   </View>
-                )}
+                ) : null}
               </View>
             </View>
           </View>
@@ -779,8 +731,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 800,
     alignSelf: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.lg,
   },
 
   // --- Header ---
@@ -788,30 +740,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
   },
   headerTextGroup: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   headerTitle: {
     fontFamily: typography.screenTitle.fontFamily,
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '600',
-    letterSpacing: -0.28,
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    letterSpacing: -0.2,
     color: colors.textPrimary,
   },
   headerSubtitle: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   closeButton: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -834,20 +786,20 @@ const styles = StyleSheet.create({
 
   // --- Section Common ---
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 1.2,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
     color: colors.textMuted,
-    marginBottom: spacing.sm,
+    marginBottom: 6,
   },
   cardContainer: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
-    padding: spacing.lg,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: colors.border,
     ...shadows.card,
@@ -858,32 +810,32 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
   },
   fieldDivider: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    marginTop: spacing.sm + 2,
+    paddingTop: spacing.sm + 2,
     borderTopWidth: 1,
     borderTopColor: colors.backgroundAlt,
   },
   twoColumnRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   flexColumn: {
     flex: 1,
   },
   inputLabel: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginBottom: 3,
   },
   inputWrapper: {
-    height: 48,
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     borderWidth: 1,
     borderColor: colors.transparent,
   },
@@ -891,16 +843,16 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
   },
   inputIconBox: {
-    marginRight: spacing.sm,
+    marginRight: spacing.xs + 2,
   },
   inputIcon: {
-    width: 16,
-    height: 16,
+    width: 15,
+    height: 15,
   },
   textInput: {
     flex: 1,
     fontFamily: typography.body.fontFamily,
-    fontSize: 15,
+    fontSize: 13.5,
     color: colors.textPrimary,
     paddingVertical: 0,
   },
@@ -910,19 +862,18 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontFamily: fontFamily.regular,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.error,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
-
 
   // --- Notes ---
   notesInput: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textPrimary,
-    minHeight: 80,
+    minHeight: 70,
     padding: 0,
   },
 
@@ -930,7 +881,7 @@ const styles = StyleSheet.create({
   previewCard: {
     position: 'relative',
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
     overflow: 'hidden',
@@ -941,27 +892,27 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 4,
+    width: 3.5,
     backgroundColor: colors.primary,
   },
   previewContent: {
-    padding: spacing.lg,
-    paddingLeft: spacing.lg + 4,
+    padding: 12,
+    paddingLeft: 16,
   },
   previewHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs + 2,
   },
   previewTitleGroup: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   previewHotelTitle: {
     fontFamily: typography.cardTitle.fontFamily,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: 14.5,
+    lineHeight: 19,
     fontWeight: '600',
     color: colors.textPrimary,
   },
@@ -971,31 +922,31 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   previewLocationIcon: {
-    fontSize: 12,
-    marginRight: 4,
+    fontSize: 11,
+    marginRight: 3,
   },
   previewLocationText: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 13,
+    fontSize: 11.5,
     color: colors.textSecondary,
     flex: 1,
   },
   stayBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: colors.primarySurface,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
     borderRadius: radius.full,
   },
   stayBadgeIcon: {
-    width: 14,
-    height: 14,
+    width: 12,
+    height: 12,
   },
   stayBadgeText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: colors.primary,
   },
@@ -1005,14 +956,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: colors.backgroundAlt,
     borderRadius: radius.input,
-    padding: spacing.md,
+    padding: 10,
     marginTop: spacing.xs,
   },
   previewDateCol: {
     flex: 1,
   },
   previewDateTag: {
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '600',
     letterSpacing: 0.8,
     color: colors.textMuted,
@@ -1020,13 +971,13 @@ const styles = StyleSheet.create({
   },
   previewDateMain: {
     fontFamily: typography.body.fontFamily,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   previewTimeSub: {
     fontFamily: typography.caption.fontFamily,
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textSecondary,
     marginTop: 1,
   },
@@ -1036,17 +987,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   connectorLine: {
-    width: 24,
+    width: 20,
     height: 1,
     backgroundColor: colors.border,
   },
   nightsBadge: {
-    paddingVertical: 2,
-    paddingHorizontal: 6,
+    paddingVertical: 1,
+    paddingHorizontal: 4,
     marginVertical: 2,
   },
   nightsBadgeText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '500',
     color: colors.textMuted,
   },
@@ -1054,19 +1005,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: spacing.md,
-    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
+    paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: colors.backgroundAlt,
   },
   previewRoomText: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: colors.textSecondary,
     fontFamily: typography.caption.fontFamily,
   },
   previewConfText: {
     fontFamily: fontFamily.semiBold,
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '600',
     color: colors.textMuted,
     letterSpacing: 0.5,
@@ -1076,10 +1027,10 @@ const styles = StyleSheet.create({
   actionsSection: {
     flexDirection: 'column',
     gap: spacing.sm,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
   primarySubmitButton: {
-    height: 52,
+    height: 44,
     backgroundColor: colors.primary,
     borderRadius: radius.button,
     alignItems: 'center',
@@ -1088,12 +1039,12 @@ const styles = StyleSheet.create({
   },
   primarySubmitButtonText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
   },
   cancelButton: {
-    height: 48,
+    height: 40,
     backgroundColor: colors.transparent,
     borderRadius: radius.button,
     alignItems: 'center',
@@ -1101,14 +1052,14 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontFamily: typography.label.fontFamily,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.textSecondary,
   },
   errorBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    padding: spacing.md,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
     backgroundColor: 'rgba(176, 74, 74, 0.10)',
     borderRadius: radius.card,
     borderWidth: 1,
@@ -1116,60 +1067,8 @@ const styles = StyleSheet.create({
   },
   errorBannerText: {
     ...typography.body,
-    fontSize: 13,
+    fontSize: 12,
     color: colors.error,
     textAlign: 'center',
-  },
-  selectTrigger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    height: 48,
-    marginTop: spacing.xs,
-  },
-  selectTriggerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  selectTriggerText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  selectTriggerArrow: {
-    fontSize: 10,
-    color: colors.textSecondary,
-  },
-  dropdownMenu: {
-    marginTop: spacing.xs,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.input,
-    overflow: 'hidden',
-    ...shadows.sheet,
-  },
-  dropdownItem: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  dropdownItemActive: {
-    backgroundColor: 'rgba(44, 95, 94, 0.08)',
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  dropdownItemTextActive: {
-    color: colors.primary,
-    fontWeight: '600',
   },
 });

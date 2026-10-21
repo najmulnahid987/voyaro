@@ -1,3 +1,10 @@
+/**
+ * Route: /(tabs)/profile/preferences — Travel Preferences Screen
+ *
+ * Configures traveler style, preferred pace, and interest tags.
+ * Integrates with persistent navigation shell using useShellInsets.
+ */
+
 import React, { useState, useEffect } from 'react';
 import {
   KeyboardAvoidingView,
@@ -10,11 +17,11 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, IconButton } from '@/components/ui';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { Button } from '@/components/ui';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { useAuth } from '@/services/AuthContext';
 import { TravelStyle, TravelPace } from '@/services/profile';
+import { useShellInsets } from '@/components/navigation';
 
 interface StyleOption {
   id: TravelStyle;
@@ -59,6 +66,7 @@ const INTEREST_OPTIONS: InterestOption[] = [
 ];
 
 export default function ProfilePreferencesScreen() {
+  const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
   const { profile, updateProfile } = useAuth();
 
   const [selectedStyle, setSelectedStyle] = useState<TravelStyle>(
@@ -117,38 +125,46 @@ export default function ProfilePreferencesScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+    <View style={styles.screen}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Top App Bar */}
-        <View style={styles.navBar}>
-          <IconButton
-            variant="ghost"
-            size="sm"
-            onPress={() => router.back()}
-            icon={
-              <Image
-                source={require('@/assets/images/arrow-left.svg')}
-                style={styles.navIcon}
-                contentFit="contain"
-              />
-            }
-            accessibilityLabel="Go back"
-          />
-          <Text style={styles.navTitle}>Travel Preferences</Text>
-          <View style={styles.navPlaceholder} />
-        </View>
-
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: contentPaddingTop,
+              paddingBottom: contentPaddingBottom + spacing.xl,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
           <View style={styles.container}>
+            {/* Top Sub-Navigation Bar */}
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                hitSlop={8}
+              >
+                <Text style={styles.backArrow}>←</Text>
+              </Pressable>
+
+              <Text style={styles.topBarTitle}>Travel Preferences</Text>
+
+              <View style={styles.topBarSpacer} />
+            </View>
+
             {/* Success Banner */}
-            {successBanner && (
+            {successBanner ? (
               <View style={styles.successBanner}>
                 <Image
                   source={require('@/assets/images/onboarding/check.svg')}
@@ -159,17 +175,17 @@ export default function ProfilePreferencesScreen() {
                   Travel preferences updated successfully!
                 </Text>
               </View>
-            )}
+            ) : null}
 
             {/* Error Banner */}
-            {errorMessage && (
+            {errorMessage ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{errorMessage}</Text>
               </View>
-            )}
+            ) : null}
 
             {/* ── 1. Traveler Style ────────────────────────────────────────── */}
-            <View style={styles.sectionCard}>
+            <View style={styles.card}>
               <Text style={styles.sectionHeader}>TRAVELER STYLE</Text>
               <Text style={styles.sectionSubtitle}>
                 Who do you usually explore the world with?
@@ -180,7 +196,10 @@ export default function ProfilePreferencesScreen() {
                   return (
                     <Pressable
                       key={style.id}
-                      onPress={() => setSelectedStyle(style.id)}
+                      onPress={() => {
+                        setSelectedStyle(style.id);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
                       style={[
                         styles.styleCard,
                         isSelected ? styles.styleCardSelected : styles.styleCardUnselected,
@@ -189,7 +208,7 @@ export default function ProfilePreferencesScreen() {
                       accessibilityState={{ selected: isSelected }}
                       accessibilityLabel={style.label}
                     >
-                      {isSelected && (
+                      {isSelected ? (
                         <View style={styles.checkBadge}>
                           <Image
                             source={require('@/assets/images/onboarding/check.svg')}
@@ -197,7 +216,7 @@ export default function ProfilePreferencesScreen() {
                             contentFit="contain"
                           />
                         </View>
-                      )}
+                      ) : null}
                       <Image
                         source={style.icon}
                         style={[
@@ -221,7 +240,7 @@ export default function ProfilePreferencesScreen() {
             </View>
 
             {/* ── 2. Travel Pace ───────────────────────────────────────────── */}
-            <View style={styles.sectionCard}>
+            <View style={styles.card}>
               <Text style={styles.sectionHeader}>TRAVEL PACE</Text>
               <Text style={styles.sectionSubtitle}>
                 How packed do you prefer your itineraries to be?
@@ -232,7 +251,10 @@ export default function ProfilePreferencesScreen() {
                   return (
                     <Pressable
                       key={pace.id}
-                      onPress={() => setSelectedPace(pace.id)}
+                      onPress={() => {
+                        setSelectedPace(pace.id);
+                        if (errorMessage) setErrorMessage(null);
+                      }}
                       style={[
                         styles.paceCard,
                         isSelected ? styles.paceCardSelected : styles.paceCardUnselected,
@@ -250,7 +272,7 @@ export default function ProfilePreferencesScreen() {
                         >
                           {pace.title}
                         </Text>
-                        {isSelected && (
+                        {isSelected ? (
                           <View style={styles.checkBadge}>
                             <Image
                               source={require('@/assets/images/onboarding/check.svg')}
@@ -258,7 +280,7 @@ export default function ProfilePreferencesScreen() {
                               contentFit="contain"
                             />
                           </View>
-                        )}
+                        ) : null}
                       </View>
                       <Text style={styles.paceDesc}>{pace.desc}</Text>
                     </Pressable>
@@ -268,7 +290,7 @@ export default function ProfilePreferencesScreen() {
             </View>
 
             {/* ── 3. Travel Interests ──────────────────────────────────────── */}
-            <View style={styles.sectionCard}>
+            <View style={styles.card}>
               <Text style={styles.sectionHeader}>TRAVEL INTERESTS</Text>
               <Text style={styles.sectionSubtitle}>
                 Choose the activities you care about most.
@@ -304,7 +326,7 @@ export default function ProfilePreferencesScreen() {
                       >
                         {interest.label}
                       </Text>
-                      {isSelected && (
+                      {isSelected ? (
                         <View style={styles.checkBadgeSmall}>
                           <Image
                             source={require('@/assets/images/onboarding/check.svg')}
@@ -312,7 +334,7 @@ export default function ProfilePreferencesScreen() {
                             contentFit="contain"
                           />
                         </View>
-                      )}
+                      ) : null}
                     </Pressable>
                   );
                 })}
@@ -322,8 +344,7 @@ export default function ProfilePreferencesScreen() {
             {/* Save Preferences Button */}
             <Button
               variant="primary"
-              label="Save Preferences"
-              fullWidth
+              label={loading ? 'Saving Preferences...' : 'Save Preferences'}
               loading={loading}
               onPress={handleSave}
               style={styles.saveButton}
@@ -331,130 +352,147 @@ export default function ProfilePreferencesScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
   keyboardView: {
     flex: 1,
   },
-  navBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  navIcon: {
-    width: 20,
-    height: 20,
-  },
-  navTitle: {
-    ...typography.sectionTitle,
-    fontSize: 17,
-    fontWeight: '600',
-    color: colors.textPrimary,
-  },
-  navPlaceholder: {
-    width: 36,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   container: {
     width: '100%',
-    maxWidth: 480,
+    maxWidth: 500,
     alignSelf: 'center',
-    gap: spacing.lg,
+    gap: spacing.md,
+  },
+
+  // ── Top Navigation Bar ───────────────────────────────────────────────────
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: 2,
+  },
+  topBarTitle: {
+    fontFamily: typography.sectionTitle.fontFamily,
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  topBarSpacer: {
+    width: 32,
+  },
+  iconCircleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  backArrow: {
+    fontSize: 16,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  buttonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.96 }],
   },
 
   // ── Banners ──────────────────────────────────────────────────────────────
   successBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(44, 95, 94, 0.12)',
+    gap: spacing.xs + 2,
+    backgroundColor: 'rgba(44, 95, 94, 0.10)',
     borderWidth: 1,
     borderColor: colors.primary,
-    borderRadius: radius.button,
-    padding: spacing.md,
+    borderRadius: radius.input,
+    padding: spacing.sm,
   },
   bannerCheckIcon: {
-    width: 16,
-    height: 16,
+    width: 14,
+    height: 14,
     tintColor: colors.primary,
   },
   successBannerText: {
-    ...typography.label,
-    fontSize: 14,
+    fontFamily: fontFamily.medium,
+    fontSize: 12.5,
     color: colors.primary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   errorBanner: {
-    backgroundColor: 'rgba(176, 74, 74, 0.10)',
-    borderRadius: radius.button,
-    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.08)',
+    borderRadius: radius.input,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: colors.error,
   },
   errorBannerText: {
-    ...typography.caption,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
     color: colors.error,
     fontWeight: '500',
     textAlign: 'center',
   },
 
-  // ── Section Card ─────────────────────────────────────────────────────────
-  sectionCard: {
+  // ── Card ─────────────────────────────────────────────────────────────────
+  card: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.xl,
-    gap: spacing.md,
+    padding: 12,
+    gap: spacing.sm,
     ...shadows.card,
   },
   sectionHeader: {
-    ...typography.caption,
+    fontFamily: fontFamily.semiBold,
     fontSize: 11,
     fontWeight: '600',
-    letterSpacing: 0.6,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
     color: colors.textMuted,
   },
   sectionSubtitle: {
-    ...typography.bodySecondary,
-    fontSize: 14,
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textSecondary,
-    marginTop: -spacing.xs,
+    marginTop: -2,
+    marginBottom: 4,
   },
 
   // ── 1. Traveler Style ────────────────────────────────────────────────────
   styleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.xs + 2,
   },
   styleCard: {
     width: '31%',
-    minHeight: 88,
-    borderRadius: radius.card,
+    minHeight: 76,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: 4,
     position: 'relative',
   },
   styleCardUnselected: {
@@ -463,18 +501,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   styleCardSelected: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.primary,
     backgroundColor: colors.primarySurface,
   },
   styleIcon: {
-    width: 28,
-    height: 28,
-    marginBottom: spacing.xs,
+    width: 24,
+    height: 24,
+    marginBottom: 4,
   },
   styleLabel: {
-    ...typography.caption,
-    fontSize: 13,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
     fontWeight: '500',
     color: colors.textPrimary,
     textAlign: 'center',
@@ -485,28 +523,28 @@ const styles = StyleSheet.create({
   },
   checkBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    top: 5,
+    right: 5,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkIcon: {
-    width: 10,
-    height: 10,
+    width: 9,
+    height: 9,
+    tintColor: colors.textOnPrimary,
   },
 
   // ── 2. Travel Pace ───────────────────────────────────────────────────────
   paceList: {
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.xs + 2,
   },
   paceCard: {
-    borderRadius: radius.card,
-    padding: spacing.lg,
+    borderRadius: 12,
+    padding: 10,
   },
   paceCardUnselected: {
     borderWidth: 1,
@@ -514,7 +552,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   paceCardSelected: {
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: colors.primary,
     backgroundColor: colors.primarySurface,
   },
@@ -522,11 +560,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   paceTitle: {
-    ...typography.sectionTitle,
-    fontSize: 16,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
   },
@@ -534,24 +572,24 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   paceDesc: {
-    ...typography.bodySecondary,
-    fontSize: 13,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
     color: colors.textSecondary,
+    lineHeight: 16,
   },
 
   // ── 3. Interests ─────────────────────────────────────────────────────────
   interestsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.xs,
   },
   interestCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: radius.full,
   },
   interestCardUnselected: {
@@ -565,12 +603,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySurface,
   },
   interestIcon: {
-    width: 18,
-    height: 18,
+    width: 15,
+    height: 15,
   },
   interestLabel: {
-    ...typography.label,
-    fontSize: 13,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
     color: colors.textPrimary,
   },
   interestLabelSelected: {
@@ -578,22 +616,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   checkBadgeSmall: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 2,
+    marginLeft: 1,
   },
   checkIconSmall: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
+    tintColor: colors.textOnPrimary,
   },
 
   // ── CTA ──────────────────────────────────────────────────────────────────
   saveButton: {
+    height: 44,
     marginTop: spacing.xs,
-    marginBottom: spacing.xl,
   },
 });
+

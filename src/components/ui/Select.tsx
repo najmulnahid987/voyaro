@@ -56,7 +56,7 @@ export function Select({
 
   return (
     <View style={containerStyle}>
-      {label && <Text style={styles.label}>{label}</Text>}
+      {Boolean(label) ? <Text style={styles.label}>{label}</Text> : null}
 
       <Pressable
         testID={testID}
@@ -78,11 +78,11 @@ export function Select({
         <ChevronDown color={disabled ? colors.textMuted : colors.textSecondary} />
       </Pressable>
 
-      {(error || helperText) && (
+      {Boolean(error || helperText) ? (
         <Text style={[styles.helperText, hasError && styles.errorText]}>
           {error ?? helperText}
         </Text>
-      )}
+      ) : null}
     </View>
   );
 }

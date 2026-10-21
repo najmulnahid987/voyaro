@@ -1,3 +1,15 @@
+/**
+ * Route: /(tabs)/trips/create — Create & Edit Trip Screen
+ *
+ * Compact, responsive travel-planning form adhering to Voyaro design tokens.
+ * Features:
+ *   - Unified top sub-navigation bar with circular back button
+ *   - Card-grouped form layout with normalized 12px borders and clean spacing
+ *   - 42px standard input wrappers and native DateTimePickerField
+ *   - Compact travelers stepper and trip style pill selector
+ *   - 44px standard CTA button and persistent tab bar inset clearance
+ */
+
 import React, { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -11,11 +23,11 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
-import { Trip } from '@/services/mockData';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import { createTrip, updateTrip, fetchTripById } from '@/services/trip';
 import { CurrencyCode } from '@/types/expense';
 import { useShellInsets } from '@/components/navigation';
+import { DateTimePickerField } from '@/components/ui';
 
 function toIsoDate(dateStr: string): string {
   try {
@@ -73,19 +85,6 @@ const CURRENCIES = [
   { code: 'JPY', symbol: '¥', label: 'JPY ¥' },
 ];
 
-/**
- * Route: /(tabs)/trips/create — Create Trip Screen (Phase 4)
- *
- * Visual Source of Truth: Google Stitch Create Trip design (create-trip.png & create-trip.html)
- * Features:
- *   - Trip Name with edit icon
- *   - Destinations with "+ Add Stop" action and location icon
- *   - 2-Column Start Date & End Date pickers
- *   - Travelers Stepper (Adults & Children)
- *   - Trip Style Pill Selector (Couple, Solo, Family, Friends, Business)
- *   - Estimated Budget with Currency Dropdown & Numeric input
- *   - Create Trip CTA & Cancel button
- */
 export default function CreateTripScreen() {
   const { contentPaddingTop, contentPaddingBottom } = useShellInsets();
 
@@ -97,8 +96,16 @@ export default function CreateTripScreen() {
   const [tripName, setTripName] = useState('');
   const [destination, setDestination] = useState('');
   const [stops, setStops] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState('Oct 12, 2028');
-  const [endDate, setEndDate] = useState('Oct 26, 2028');
+  const [startDateObj, setStartDateObj] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d;
+  });
+  const [endDateObj, setEndDateObj] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d;
+  });
   const [travelers, setTravelers] = useState(2);
   const [selectedStyle, setSelectedStyle] = useState<TripStyleType>('couple');
   const [selectedCurrency, setSelectedCurrency] = useState(CURRENCIES[0]);
@@ -113,9 +120,6 @@ export default function CreateTripScreen() {
   }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  // Quick Date Picker State
-  const [activeDateModal, setActiveDateModal] = useState<'start' | 'end' | null>(null);
 
   // Role state for editing permissions
   const [userRole, setUserRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
@@ -133,11 +137,19 @@ export default function CreateTripScreen() {
             if (existing.isOwner === false || (existing.userRole && existing.userRole !== 'owner')) {
               setSubmitError('Only the trip owner can edit trip details and settings.');
             }
-            setTripName(existing.title);
-            setDestination(existing.destination);
+            setTripName(existing.title || '');
+            setDestination(existing.destination || '');
             setStops(existing.cities || []);
-            setStartDate(existing.startDate);
-            setEndDate(existing.endDate);
+
+            if (existing.startDate) {
+              const parsedStart = new Date(existing.startDate);
+              if (!isNaN(parsedStart.getTime())) setStartDateObj(parsedStart);
+            }
+            if (existing.endDate) {
+              const parsedEnd = new Date(existing.endDate);
+              if (!isNaN(parsedEnd.getTime())) setEndDateObj(parsedEnd);
+            }
+
             setTravelers(existing.travelerCount || 1);
             if (existing.spending?.budget) {
               setBudget(existing.spending.budget.toString());
@@ -166,8 +178,10 @@ export default function CreateTripScreen() {
 
   // Add stop handler
   const handleAddStop = () => {
-    if (destination.trim() && !stops.includes(destination.trim())) {
-      setStops((prev) => [...prev, destination.trim()]);
+    const trimmed = destination.trim();
+    if (trimmed && !stops.includes(trimmed)) {
+      setStops((prev) => [...prev, trimmed]);
+      setDestination('');
     }
   };
 
@@ -187,8 +201,8 @@ export default function CreateTripScreen() {
       newErrors.destination = 'Destination is required.';
     }
 
-    const startDateIso = toIsoDate(startDate);
-    const endDateIso = toIsoDate(endDate);
+    const startDateIso = startDateObj.toISOString().split('T')[0];
+    const endDateIso = endDateObj.toISOString().split('T')[0];
 
     if (endDateIso < startDateIso) {
       newErrors.dates = 'End date must be on or after start date.';
@@ -210,7 +224,9 @@ export default function CreateTripScreen() {
     setIsSubmitting(true);
 
     const parsedBudget = parseFloat(budget.replace(/[^0-9.]/g, '')) || 0;
-    const allDestinations = stops.length > 0 ? stops : [destination.trim()];
+    const allDestinations = stops.length > 0
+      ? (destination.trim() && !stops.includes(destination.trim()) ? [...stops, destination.trim()] : stops)
+      : [destination.trim()];
 
     try {
       if (isEditing && tripId) {
@@ -251,8 +267,10 @@ export default function CreateTripScreen() {
     router.back();
   };
 
+  const isOwnerBlocked = isEditing && userRole !== null && userRole !== 'owner';
+
   return (
-    <View style={styles.safeArea}>
+    <View style={styles.screen}>
       <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -261,18 +279,40 @@ export default function CreateTripScreen() {
           style={styles.scrollView}
           contentContainerStyle={[
             styles.scrollContent,
-            { paddingTop: contentPaddingTop, paddingBottom: contentPaddingBottom },
+            {
+              paddingTop: contentPaddingTop,
+              paddingBottom: contentPaddingBottom + spacing.xl,
+            },
           ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.container}>
-            {/* ── 1. Hero / Destination Preview Header ───────────────────── */}
-            <View style={styles.heroSection}>
-              <Text style={styles.heroTitle}>
-                {isEditing ? 'Edit Trip' : 'Create a new trip'}
+            {/* ── 1. Top Sub-Navigation Bar ──────────────────────────────── */}
+            <View style={styles.topBar}>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.iconCircleButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                hitSlop={8}
+              >
+                <Text style={styles.backArrow}>←</Text>
+              </Pressable>
+
+              <Text style={styles.topBarTitle}>
+                {isEditing ? 'Edit Trip' : 'Create Trip'}
               </Text>
-              <Text style={styles.heroSubtitle}>
+
+              <View style={styles.topBarSpacer} />
+            </View>
+
+            {/* Subtitle */}
+            <View style={styles.headerSubtitleSection}>
+              <Text style={styles.headerSubtitle}>
                 {isEditing
                   ? 'Update your trip details and itinerary settings.'
                   : 'Where will your next story begin?'}
@@ -280,23 +320,25 @@ export default function CreateTripScreen() {
             </View>
 
             {/* Error Banner */}
-            {submitError && (
+            {submitError ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{submitError}</Text>
               </View>
-            )}
+            ) : null}
 
-            {errors.dates && (
+            {errors.dates ? (
               <View style={styles.errorBanner}>
                 <Text style={styles.errorBannerText}>{errors.dates}</Text>
               </View>
-            )}
+            ) : null}
 
-            {/* ── 2. General Info Section ─────────────────────────────────── */}
-            <View style={styles.section}>
+            {/* ── 2. Trip General Info Card ─────────────────────────────── */}
+            <View style={styles.cardContainer}>
+              <Text style={styles.sectionTitle}>TRIP DETAILS</Text>
+
               {/* Trip Name */}
               <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Trip Name</Text>
+                <Text style={styles.inputLabel}>Trip Name *</Text>
                 <View
                   style={[
                     styles.inputWrapper,
@@ -316,20 +358,19 @@ export default function CreateTripScreen() {
                     }}
                     accessibilityLabel="Trip Name"
                   />
-                  {/* Pencil Edit Icon */}
-                  <View style={styles.editIconWrapper}>
+                  <View style={styles.inputIconBox}>
                     <View style={styles.pencilShape} />
                   </View>
                 </View>
-                {errors.tripName && (
+                {errors.tripName ? (
                   <Text style={styles.errorText}>{errors.tripName}</Text>
-                )}
+                ) : null}
               </View>
 
               {/* Destinations */}
-              <View style={styles.fieldGroup}>
+              <View style={[styles.fieldGroup, styles.fieldSpacingTop]}>
                 <View style={styles.fieldLabelRow}>
-                  <Text style={styles.fieldLabel}>Destinations</Text>
+                  <Text style={styles.inputLabel}>Destination *</Text>
                   <Pressable
                     onPress={handleAddStop}
                     hitSlop={8}
@@ -351,7 +392,6 @@ export default function CreateTripScreen() {
                     errors.destination ? styles.inputWrapperError : null,
                   ]}
                 >
-                  {/* Location Pin Icon */}
                   <View style={styles.locationIconWrapper}>
                     <View style={styles.locationPinOuter}>
                       <View style={styles.locationPinInner} />
@@ -371,12 +411,12 @@ export default function CreateTripScreen() {
                     accessibilityLabel="Destinations"
                   />
                 </View>
-                {errors.destination && (
+                {errors.destination ? (
                   <Text style={styles.errorText}>{errors.destination}</Text>
-                )}
+                ) : null}
 
                 {/* Added Destination Chips */}
-                {stops.length > 0 && (
+                {stops.length > 0 ? (
                   <View style={styles.chipsContainer}>
                     {stops.map((stop) => (
                       <View key={stop} style={styles.stopChip}>
@@ -391,56 +431,49 @@ export default function CreateTripScreen() {
                       </View>
                     ))}
                   </View>
-                )}
+                ) : null}
               </View>
 
               {/* Dates Grid (Start Date & End Date) */}
-              <View style={styles.datesGrid}>
+              <View style={[styles.datesGrid, styles.fieldSpacingTop]}>
                 {/* Start Date */}
                 <View style={styles.dateCol}>
-                  <Text style={styles.fieldLabel}>Start Date</Text>
-                  <Pressable
-                    onPress={() => setActiveDateModal('start')}
-                    style={styles.datePickerTrigger}
-                    accessibilityRole="button"
-                    accessibilityLabel="Select Start Date"
-                  >
-                    <View style={styles.calendarIconWrapper}>
-                      <View style={styles.calendarBox}>
-                        <View style={styles.calendarTopBar} />
-                      </View>
-                    </View>
-                    <Text style={styles.datePickerText}>{startDate}</Text>
-                  </Pressable>
+                  <Text style={styles.inputLabel}>Start Date *</Text>
+                  <DateTimePickerField
+                    mode="date"
+                    value={startDateObj}
+                    onChange={(newDate) => {
+                      setStartDateObj(newDate);
+                      if (errors.dates) {
+                        setErrors((prev) => ({ ...prev, dates: undefined }));
+                      }
+                    }}
+                  />
                 </View>
 
                 {/* End Date */}
                 <View style={styles.dateCol}>
-                  <Text style={styles.fieldLabel}>End Date</Text>
-                  <Pressable
-                    onPress={() => setActiveDateModal('end')}
-                    style={styles.datePickerTrigger}
-                    accessibilityRole="button"
-                    accessibilityLabel="Select End Date"
-                  >
-                    <View style={styles.calendarIconWrapper}>
-                      <View style={styles.calendarBox}>
-                        <View style={styles.calendarTopBar} />
-                      </View>
-                    </View>
-                    <Text style={styles.datePickerText}>{endDate}</Text>
-                  </Pressable>
+                  <Text style={styles.inputLabel}>End Date *</Text>
+                  <DateTimePickerField
+                    mode="date"
+                    value={endDateObj}
+                    onChange={(newDate) => {
+                      setEndDateObj(newDate);
+                      if (errors.dates) {
+                        setErrors((prev) => ({ ...prev, dates: undefined }));
+                      }
+                    }}
+                  />
                 </View>
               </View>
             </View>
 
-            {/* ── 3. Section Divider ──────────────────────────────────────── */}
-            <View style={styles.sectionDivider} />
+            {/* ── 3. Travel Preferences & Group Card ────────────────────── */}
+            <View style={styles.cardContainer}>
+              <Text style={styles.sectionTitle}>TRAVELERS & STYLE</Text>
 
-            {/* ── 4. Details Section ──────────────────────────────────────── */}
-            <View style={styles.section}>
               {/* Travelers Stepper */}
-              <View style={styles.travelersCard}>
+              <View style={styles.travelersRow}>
                 <View style={styles.travelersLeft}>
                   <View style={styles.travelersIconCircle}>
                     <Image
@@ -463,12 +496,13 @@ export default function CreateTripScreen() {
                     onPress={handleDecrementTravelers}
                     disabled={travelers <= 1}
                     style={({ pressed }) => [
-                      styles.stepperButtonMinus,
+                      styles.stepperButton,
                       travelers <= 1 && styles.stepperButtonDisabled,
-                      pressed && styles.stepperButtonPressed,
+                      pressed && styles.buttonPressed,
                     ]}
                     accessibilityRole="button"
                     accessibilityLabel="Decrease travelers"
+                    hitSlop={6}
                   >
                     <Text style={styles.stepperMinusText}>−</Text>
                   </Pressable>
@@ -478,11 +512,13 @@ export default function CreateTripScreen() {
                   <Pressable
                     onPress={handleIncrementTravelers}
                     style={({ pressed }) => [
+                      styles.stepperButton,
                       styles.stepperButtonPlus,
-                      pressed && styles.stepperButtonPressed,
+                      pressed && styles.buttonPressed,
                     ]}
                     accessibilityRole="button"
                     accessibilityLabel="Increase travelers"
+                    hitSlop={6}
                   >
                     <Image
                       source={require('@/assets/images/icons/plus.svg')}
@@ -494,8 +530,8 @@ export default function CreateTripScreen() {
               </View>
 
               {/* Trip Style Chips */}
-              <View style={styles.fieldGroup}>
-                <Text style={styles.fieldLabel}>Trip Style</Text>
+              <View style={[styles.fieldGroup, styles.fieldSpacingTop]}>
+                <Text style={styles.inputLabel}>Trip Style</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -544,9 +580,9 @@ export default function CreateTripScreen() {
               </View>
 
               {/* Estimated Budget (Optional) */}
-              <View style={styles.fieldGroup}>
+              <View style={[styles.fieldGroup, styles.fieldSpacingTop]}>
                 <View style={styles.fieldLabelRow}>
-                  <Text style={styles.fieldLabel}>Estimated Budget</Text>
+                  <Text style={styles.inputLabel}>Estimated Budget</Text>
                   <Text style={styles.optionalText}>Optional</Text>
                 </View>
 
@@ -566,7 +602,7 @@ export default function CreateTripScreen() {
                     </Pressable>
 
                     {/* Currency Dropdown Menu */}
-                    {isCurrencyDropdownOpen && (
+                    {isCurrencyDropdownOpen ? (
                       <View style={styles.currencyDropdown}>
                         {CURRENCIES.map((curr) => (
                           <Pressable
@@ -593,7 +629,7 @@ export default function CreateTripScreen() {
                           </Pressable>
                         ))}
                       </View>
-                    )}
+                    ) : null}
                   </View>
 
                   {/* Budget Amount Input */}
@@ -612,46 +648,43 @@ export default function CreateTripScreen() {
               </View>
             </View>
 
-            {/* ── 5. Actions Area ─────────────────────────────────────────── */}
+            {/* ── 4. Action Buttons ─────────────────────────────────────── */}
             <View style={styles.actionsSection}>
-              {(() => {
-                const isOwnerBlocked = isEditing && userRole !== null && userRole !== 'owner';
-                return (
-                  <Pressable
-                    onPress={handleCreateTrip}
-                    disabled={isSubmitting || isOwnerBlocked}
-                    style={({ pressed }) => [
-                      styles.createTripButton,
-                      isOwnerBlocked && styles.createTripButtonDisabled,
-                      pressed && !isOwnerBlocked && styles.buttonPressed,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={isEditing ? 'Save Changes' : 'Create Trip'}
-                  >
-                    <Text style={[
-                      styles.createTripButtonText,
-                      isOwnerBlocked && styles.createTripButtonTextDisabled,
-                    ]}>
-                      {isSubmitting
-                        ? isEditing
-                          ? 'Saving...'
-                          : 'Creating...'
-                        : isOwnerBlocked
-                        ? 'Owner Only'
-                        : isEditing
-                        ? 'Save Changes'
-                        : 'Create Trip'}
-                    </Text>
-                    {!isOwnerBlocked && (
-                      <Image
-                        source={require('@/assets/images/onboarding/arrow-right.svg')}
-                        style={styles.createTripButtonIcon}
-                        contentFit="contain"
-                      />
-                    )}
-                  </Pressable>
-                );
-              })()}
+              <Pressable
+                onPress={handleCreateTrip}
+                disabled={isSubmitting || isOwnerBlocked}
+                style={({ pressed }) => [
+                  styles.createTripButton,
+                  isOwnerBlocked && styles.createTripButtonDisabled,
+                  pressed && !isOwnerBlocked && styles.buttonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={isEditing ? 'Save Changes' : 'Create Trip'}
+              >
+                <Text
+                  style={[
+                    styles.createTripButtonText,
+                    isOwnerBlocked && styles.createTripButtonTextDisabled,
+                  ]}
+                >
+                  {isSubmitting
+                    ? isEditing
+                      ? 'Saving...'
+                      : 'Creating...'
+                    : isOwnerBlocked
+                    ? 'Owner Only'
+                    : isEditing
+                    ? 'Save Changes'
+                    : 'Create Trip'}
+                </Text>
+                {!isOwnerBlocked ? (
+                  <Image
+                    source={require('@/assets/images/onboarding/arrow-right.svg')}
+                    style={styles.createTripButtonIcon}
+                    contentFit="contain"
+                  />
+                ) : null}
+              </Pressable>
 
               <Pressable
                 onPress={handleCancel}
@@ -668,57 +701,12 @@ export default function CreateTripScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* ── Quick Date Picker Modal (Presets for testing) ─────────────── */}
-      {activeDateModal && (
-        <Pressable
-          style={styles.modalOverlay}
-          onPress={() => setActiveDateModal(null)}
-        >
-          <View style={styles.dateModalCard}>
-            <Text style={styles.dateModalTitle}>
-              Select {activeDateModal === 'start' ? 'Start Date' : 'End Date'}
-            </Text>
-            <View style={styles.datePresetsList}>
-              {[
-                'Oct 12, 2028',
-                'Oct 18, 2028',
-                'Oct 26, 2028',
-                'Nov 05, 2028',
-                'Dec 20, 2028',
-                'Jan 15, 2029',
-              ].map((d) => (
-                <Pressable
-                  key={d}
-                  onPress={() => {
-                    if (activeDateModal === 'start') {
-                      setStartDate(d);
-                    } else {
-                      setEndDate(d);
-                    }
-                    setActiveDateModal(null);
-                  }}
-                  style={styles.datePresetItem}
-                >
-                  <Text style={styles.datePresetText}>{d}</Text>
-                </Pressable>
-              ))}
-            </View>
-            <Pressable
-              onPress={() => setActiveDateModal(null)}
-              style={styles.dateModalCloseBtn}
-            >
-              <Text style={styles.dateModalCloseText}>Close</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: {
     flex: 1,
     backgroundColor: colors.background,
   },
@@ -729,345 +717,343 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    flexGrow: 1,
+    paddingHorizontal: spacing.md,
   },
   container: {
     width: '100%',
-    maxWidth: 600,
+    maxWidth: 500,
     alignSelf: 'center',
-    gap: spacing.xl,
+    gap: spacing.md,
   },
 
-  // ── Hero Section ───────────────────────────────────────────────────────────
-  heroSection: {
-    paddingTop: spacing.sm,
-    gap: spacing.xs,
+  // ── Top Navigation Bar ───────────────────────────────────────────────────
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+    marginBottom: 2,
   },
-  heroTitle: {
-    ...typography.display,
-    fontSize: 28,
-    lineHeight: 34,
+  topBarTitle: {
+    fontFamily: typography.sectionTitle.fontFamily,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.textPrimary,
-    letterSpacing: -0.28,
   },
-  heroSubtitle: {
-    ...typography.body,
+  topBarSpacer: {
+    width: 32,
+  },
+  iconCircleButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.card,
+  },
+  backArrow: {
     fontSize: 16,
-    lineHeight: 24,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  buttonPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.97 }],
+  },
+
+  // ── Header Subtitle ──────────────────────────────────────────────────────
+  headerSubtitleSection: {
+    marginTop: -spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  headerSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textSecondary,
   },
 
-  // ── Section & Field Styles ─────────────────────────────────────────────────
-  section: {
-    gap: spacing.lg,
+  // ── Card Container ───────────────────────────────────────────────────────
+  cardContainer: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.card,
   },
+  sectionTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+    marginBottom: 8,
+  },
+
+  // ── Fields ───────────────────────────────────────────────────────────────
   fieldGroup: {
-    gap: spacing.sm,
+    flexDirection: 'column',
+  },
+  fieldSpacingTop: {
+    marginTop: spacing.md,
   },
   fieldLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 3,
   },
-  fieldLabel: {
-    ...typography.label,
-    fontSize: 14,
-    fontWeight: '500',
+  inputLabel: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11.5,
+    fontWeight: '600',
     color: colors.textSecondary,
+    marginBottom: 3,
   },
   optionalText: {
-    ...typography.caption,
-    fontSize: 13,
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
     color: colors.textMuted,
   },
 
-  // Input wrapper
+  // ── Input Wrapper ────────────────────────────────────────────────────────
   inputWrapper: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e2e2',
-    height: 52,
+    borderColor: colors.border,
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    ...shadows.card,
+    paddingHorizontal: spacing.sm + 2,
   },
   inputWrapperError: {
     borderColor: colors.error,
   },
   textInput: {
     flex: 1,
-    ...typography.body,
-    fontSize: 16,
+    fontFamily: fontFamily.regular,
+    fontSize: 13.5,
     color: colors.textPrimary,
     paddingVertical: 0,
   },
   textInputWithLeftIcon: {
-    paddingLeft: spacing.sm,
+    paddingLeft: spacing.xs + 2,
   },
-  editIconWrapper: {
+  inputIconBox: {
     width: 20,
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   pencilShape: {
-    width: 14,
-    height: 3,
-    backgroundColor: 'rgba(64, 72, 72, 0.40)',
+    width: 12,
+    height: 2.5,
+    backgroundColor: colors.textMuted,
     transform: [{ rotate: '-45deg' }],
     borderRadius: 1,
   },
   errorText: {
-    ...typography.caption,
-    fontSize: 12,
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
     color: colors.error,
     marginTop: 2,
-    marginLeft: 4,
+    marginLeft: 2,
   },
 
-  // Location Icon
+  // ── Location Pin Icon ────────────────────────────────────────────────────
   locationIconWrapper: {
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   locationPinOuter: {
-    width: 14,
-    height: 16,
-    borderRadius: 7,
-    borderWidth: 2,
+    width: 12,
+    height: 14,
+    borderRadius: 6,
+    borderWidth: 1.5,
     borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   locationPinInner: {
-    width: 4,
-    height: 4,
+    width: 3.5,
+    height: 3.5,
     borderRadius: 2,
     backgroundColor: colors.primary,
   },
 
-  // Add Stop Button
+  // ── Add Stop ─────────────────────────────────────────────────────────────
   addStopButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   addStopIcon: {
-    width: 14,
-    height: 14,
+    width: 13,
+    height: 13,
     tintColor: colors.primary,
   },
   addStopText: {
-    ...typography.label,
-    fontSize: 12,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11.5,
     fontWeight: '600',
     color: colors.primary,
   },
 
-  // Stop Chips
+  // ── Stop Chips ───────────────────────────────────────────────────────────
   chipsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.xs,
+    gap: spacing.xs,
+    marginTop: spacing.xs + 2,
   },
   stopChip: {
-    backgroundColor: '#eeeeee',
+    backgroundColor: colors.backgroundAlt,
     borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   stopChipText: {
-    ...typography.label,
-    fontSize: 13,
+    fontFamily: fontFamily.medium,
+    fontSize: 11.5,
     color: colors.textSecondary,
   },
   stopChipRemove: {
-    padding: 2,
+    padding: 1,
   },
   stopChipRemoveText: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.textMuted,
+    fontWeight: '600',
   },
 
-  // Dates Grid
+  // ── Dates Grid ───────────────────────────────────────────────────────────
   datesGrid: {
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   dateCol: {
     flex: 1,
-    gap: spacing.sm,
-  },
-  datePickerTrigger: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e2e2',
-    height: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-    ...shadows.card,
-  },
-  calendarIconWrapper: {
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarBox: {
-    width: 15,
-    height: 15,
-    borderRadius: 2,
-    borderWidth: 1.5,
-    borderColor: 'rgba(64, 72, 72, 0.60)',
-    overflow: 'hidden',
-  },
-  calendarTopBar: {
-    width: '100%',
-    height: 3,
-    backgroundColor: 'rgba(64, 72, 72, 0.60)',
-  },
-  datePickerText: {
-    ...typography.body,
-    fontSize: 14,
-    color: colors.textPrimary,
   },
 
-  // Section Divider
-  sectionDivider: {
-    height: 1,
-    backgroundColor: '#e2e2e2',
-    width: '100%',
-  },
-
-  // ── Travelers Card ─────────────────────────────────────────────────────────
-  travelersCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e2e2',
-    padding: spacing.md,
+  // ── Travelers Stepper ────────────────────────────────────────────────────
+  travelersRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    ...shadows.card,
+    paddingVertical: 4,
   },
   travelersLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
   },
   travelersIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(44, 95, 94, 0.10)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primarySurface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   travelersIcon: {
-    width: 20,
-    height: 20,
-    tintColor: colors.primary,
-  },
-  travelersTextGroup: {
-    gap: 2,
-  },
-  travelersTitle: {
-    ...typography.body,
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  travelersSubtitle: {
-    ...typography.caption,
-    fontSize: 12,
-    color: colors.textSecondary,
-  },
-
-  // Stepper Controls
-  stepperControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  stepperButtonMinus: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#eeeeee',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperMinusText: {
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  stepperButtonDisabled: {
-    opacity: 0.4,
-  },
-  travelersCount: {
-    ...typography.screenTitle,
-    fontSize: 20,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    minWidth: 20,
-    textAlign: 'center',
-  },
-  stepperButtonPlus: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(44, 95, 94, 0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperPlusIcon: {
     width: 16,
     height: 16,
     tintColor: colors.primary,
   },
-  stepperButtonPressed: {
-    transform: [{ scale: 0.94 }],
+  travelersTextGroup: {
+    gap: 1,
+  },
+  travelersTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  travelersSubtitle: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11.5,
+    color: colors.textSecondary,
+  },
+  stepperControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  stepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonPlus: {
+    backgroundColor: colors.primarySurface,
+    borderColor: colors.primary,
+  },
+  stepperMinusText: {
+    fontSize: 16,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  stepperButtonDisabled: {
+    opacity: 0.35,
+  },
+  travelersCount: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    minWidth: 18,
+    textAlign: 'center',
+  },
+  stepperPlusIcon: {
+    width: 13,
+    height: 13,
+    tintColor: colors.primary,
   },
 
-  // ── Trip Style Chips ───────────────────────────────────────────────────────
+  // ── Trip Style Chips ─────────────────────────────────────────────────────
   stylesScrollContent: {
-    gap: spacing.sm,
+    gap: spacing.xs,
     paddingVertical: 2,
   },
   styleChip: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: radius.full,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: 5,
   },
   styleChipSelected: {
     backgroundColor: colors.primary,
     ...shadows.card,
   },
   styleChipUnselected: {
-    backgroundColor: '#eeeeee',
+    backgroundColor: colors.backgroundAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   styleChipIcon: {
-    width: 18,
-    height: 18,
+    width: 14,
+    height: 14,
   },
   styleChipIconSelected: {
     tintColor: colors.textOnPrimary,
@@ -1076,112 +1062,112 @@ const styles = StyleSheet.create({
     tintColor: colors.textSecondary,
   },
   styleChipText: {
-    ...typography.label,
-    fontSize: 14,
+    fontFamily: fontFamily.medium,
+    fontSize: 12,
     fontWeight: '500',
   },
   styleChipTextSelected: {
     color: colors.textOnPrimary,
+    fontWeight: '600',
   },
   styleChipTextUnselected: {
     color: colors.textSecondary,
   },
 
-  // ── Budget Section ─────────────────────────────────────────────────────────
+  // ── Budget Section ───────────────────────────────────────────────────────
   budgetRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
   currencyWrapper: {
-    width: 105,
+    width: 100,
     position: 'relative',
     zIndex: 10,
   },
   currencyTrigger: {
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e2e2',
-    height: 52,
+    borderColor: colors.border,
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
-    ...shadows.card,
+    paddingHorizontal: spacing.sm,
   },
   currencyCode: {
-    ...typography.body,
-    fontSize: 14,
+    fontFamily: fontFamily.medium,
+    fontSize: 12.5,
     color: colors.textPrimary,
   },
   currencyArrow: {
-    fontSize: 10,
+    fontSize: 8,
     color: colors.textSecondary,
   },
   currencyDropdown: {
     position: 'absolute',
-    top: 56,
+    top: 46,
     left: 0,
     right: 0,
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e2e2',
+    borderColor: colors.border,
     ...shadows.sheet,
     overflow: 'hidden',
-    zIndex: 20,
+    zIndex: 30,
   },
   currencyOption: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.border,
   },
   currencyOptionActive: {
     backgroundColor: 'rgba(44, 95, 94, 0.08)',
   },
   currencyOptionText: {
-    ...typography.body,
-    fontSize: 13,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
     color: colors.textPrimary,
   },
   currencyOptionTextActive: {
+    fontFamily: fontFamily.semiBold,
     fontWeight: '600',
     color: colors.primary,
   },
   budgetInputWrapper: {
     flex: 1,
     backgroundColor: colors.surface,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e2e2',
-    height: 52,
+    borderColor: colors.border,
+    height: 42,
     justifyContent: 'center',
-    paddingHorizontal: spacing.md,
-    ...shadows.card,
+    paddingHorizontal: spacing.sm + 2,
   },
   budgetTextInput: {
-    ...typography.body,
-    fontSize: 16,
+    fontFamily: fontFamily.regular,
+    fontSize: 13.5,
     color: colors.textPrimary,
+    paddingVertical: 0,
   },
 
-  // ── Actions Section ────────────────────────────────────────────────────────
+  // ── Actions Section ──────────────────────────────────────────────────────
   actionsSection: {
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
+    gap: spacing.xs + 2,
+    marginTop: spacing.xs,
     alignItems: 'center',
-    gap: spacing.md,
   },
   createTripButton: {
     width: '100%',
     backgroundColor: colors.primary,
-    borderRadius: 12,
-    height: 52,
+    borderRadius: 10,
+    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs + 2,
     ...shadows.card,
   },
   createTripButtonDisabled: {
@@ -1189,8 +1175,8 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   createTripButtonText: {
-    ...typography.label,
-    fontSize: 16,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
   },
@@ -1198,100 +1184,37 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   createTripButtonIcon: {
-    width: 18,
-    height: 18,
+    width: 14,
+    height: 14,
     tintColor: colors.textOnPrimary,
   },
   cancelButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    paddingVertical: 6,
+    paddingHorizontal: spacing.md,
   },
   cancelButtonText: {
-    ...typography.label,
-    fontSize: 14,
-    fontWeight: '500',
+    fontFamily: fontFamily.medium,
+    fontSize: 13,
     color: colors.textSecondary,
-  },
-  buttonPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
   },
   cancelButtonPressed: {
     opacity: 0.6,
   },
 
-  // ── Date Modal Overlay ─────────────────────────────────────────────────────
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    zIndex: 100,
-  },
-  dateModalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: spacing.lg,
-    gap: spacing.md,
-    ...shadows.sheet,
-  },
-  dateModalTitle: {
-    ...typography.screenTitle,
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  datePresetsList: {
-    gap: spacing.sm,
-  },
-  datePresetItem: {
-    backgroundColor: colors.background,
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e2e2e2',
-  },
-  datePresetText: {
-    ...typography.body,
-    fontSize: 15,
-    fontWeight: '500',
-    color: colors.textPrimary,
-  },
-  dateModalCloseBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: spacing.xs,
-  },
-  dateModalCloseText: {
-    ...typography.label,
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textOnPrimary,
-  },
+  // ── Error Banner ─────────────────────────────────────────────────────────
   errorBanner: {
-    backgroundColor: 'rgba(176, 74, 74, 0.10)',
-    borderRadius: radius.button,
-    padding: spacing.md,
+    backgroundColor: 'rgba(176, 74, 74, 0.08)',
+    borderRadius: radius.input,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: colors.error,
-    marginBottom: spacing.md,
   },
   errorBannerText: {
-    ...typography.caption,
+    fontFamily: fontFamily.regular,
+    fontSize: 12,
     color: colors.error,
     fontWeight: '500',
     textAlign: 'center',
   },
 });
+

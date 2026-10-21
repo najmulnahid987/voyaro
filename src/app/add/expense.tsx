@@ -35,7 +35,7 @@ import {
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, shadows, spacing, typography } from '@/theme';
+import { colors, fontFamily, radius, shadows, spacing, typography } from '@/theme';
 import {
   addExpense,
   deleteExpense,
@@ -245,7 +245,6 @@ export default function AddExpenseScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [showCurrencyDropdown, setShowCurrencyDropdown] = useState<boolean>(false);
-  const [showTripDropdown, setShowTripDropdown] = useState<boolean>(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<boolean>(false);
 
   // Synchronize state if expenseId changes without cascading effect renders
@@ -455,62 +454,7 @@ export default function AddExpenseScreen() {
             </View>
           )}
 
-          {/* ── 2. Trip Selector (Shown when editing or multiple trips) ─── */}
-          {userTrips.length > 1 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Trip</Text>
-              <View style={styles.cardContainer}>
-                <Pressable
-                  onPress={() => setShowTripDropdown((prev) => !prev)}
-                  style={styles.selectTrigger}
-                  accessibilityRole="button"
-                  accessibilityLabel="Select trip"
-                >
-                  <View style={styles.selectTriggerLeft}>
-                    <Image
-                      source={require('@/assets/images/icons/landscape.svg')}
-                      style={styles.selectIcon}
-                      tintColor={colors.primary}
-                      contentFit="contain"
-                    />
-                    <Text style={styles.selectTriggerText} numberOfLines={1}>
-                      {userTrips.find((t) => t.id === selectedTripId)?.title || trip?.title || 'Select Trip'}
-                    </Text>
-                  </View>
-                  <Text style={styles.selectTriggerArrow}>▼</Text>
-                </Pressable>
-
-                {showTripDropdown && (
-                  <View style={styles.dropdownMenu}>
-                    {userTrips.map((t) => (
-                      <Pressable
-                        key={t.id}
-                        onPress={() => {
-                          setSelectedTripId(t.id);
-                          setShowTripDropdown(false);
-                        }}
-                        style={[
-                          styles.dropdownItem,
-                          selectedTripId === t.id && styles.dropdownItemActive,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.dropdownItemText,
-                            selectedTripId === t.id && styles.dropdownItemTextActive,
-                          ]}
-                        >
-                          {t.title}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-
-          {/* ── 3. Expense Details (Title & Amount) ───────────────────────── */}
+          {/* ── 2. Expense Details (Title & Amount) ───────────────────────── */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Expense Details</Text>
 
@@ -905,7 +849,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
   },
   container: {
     flex: 1,
@@ -919,28 +863,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   headerTextGroup: {
     flex: 1,
-    marginRight: spacing.md,
+    marginRight: spacing.sm,
   },
   headerTitle: {
     fontFamily: typography.screenTitle.fontFamily,
-    fontSize: 24,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
   },
   headerSubtitle: {
     fontFamily: typography.bodySecondary.fontFamily,
-    fontSize: 14,
+    fontSize: 12,
+    lineHeight: 16,
     color: colors.textSecondary,
     marginTop: 2,
   },
   closeButton: {
-    width: 38,
-    height: 38,
+    width: 32,
+    height: 32,
     borderRadius: radius.full,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -950,8 +896,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   closeButtonIcon: {
-    width: 16,
-    height: 16,
+    width: 14,
+    height: 14,
   },
   buttonPressed: {
     opacity: 0.8,
@@ -967,33 +913,35 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
     borderWidth: 1,
     borderRadius: radius.input,
-    padding: spacing.md,
-    marginBottom: spacing.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm + 2,
   },
   formErrorText: {
+    fontFamily: fontFamily.medium,
     color: colors.error,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
   },
 
   // Section & Card Containers
   section: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   sectionTitle: {
-    fontFamily: typography.sectionTitle.fontFamily,
-    fontSize: 15,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
     fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-    letterSpacing: -0.2,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+    marginBottom: 6,
   },
   cardContainer: {
     backgroundColor: colors.surface,
-    borderRadius: radius.card,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.md,
+    padding: 12,
     ...shadows.card,
   },
 
@@ -1002,22 +950,25 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   fieldDivider: {
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
+    marginTop: spacing.sm + 2,
+    paddingTop: spacing.sm + 2,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
   inputLabel: {
-    fontSize: 13,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11.5,
     fontWeight: '600',
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginBottom: 3,
   },
   optionalLabel: {
+    fontFamily: fontFamily.regular,
     fontWeight: '400',
     color: colors.textMuted,
   },
   inputWrapper: {
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background,
@@ -1025,7 +976,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.input,
     paddingHorizontal: spacing.sm,
-    minHeight: 46,
   },
   inputWrapperError: {
     borderColor: colors.error,
@@ -1033,14 +983,16 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 15,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13.5,
     color: colors.textPrimary,
-    paddingVertical: spacing.xs,
+    paddingVertical: 0,
   },
   errorText: {
-    fontSize: 12,
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
     color: colors.error,
-    marginTop: 4,
+    marginTop: 2,
     fontWeight: '500',
   },
 
@@ -1053,8 +1005,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    height: 46,
+    paddingHorizontal: spacing.sm,
+    height: 42,
   },
   selectTriggerLeft: {
     flexDirection: 'row',
@@ -1062,17 +1014,17 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   selectIcon: {
-    width: 16,
-    height: 16,
+    width: 15,
+    height: 15,
     marginRight: spacing.sm,
   },
   selectTriggerText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.textPrimary,
   },
   selectTriggerArrow: {
-    fontSize: 10,
+    fontSize: 9,
     color: colors.textSecondary,
   },
   dropdownMenu: {
@@ -1094,7 +1046,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(44, 95, 94, 0.08)',
   },
   dropdownItemText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.textPrimary,
   },
   dropdownItemTextActive: {
@@ -1120,28 +1072,29 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.input,
     paddingHorizontal: spacing.sm,
-    height: 48,
-    minWidth: 92,
+    height: 42,
+    minWidth: 84,
     justifyContent: 'center',
   },
   currencyTriggerCode: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.textPrimary,
     marginRight: 4,
   },
   currencyTriggerSymbol: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.textSecondary,
     marginRight: 4,
   },
   currencyTriggerArrow: {
-    fontSize: 9,
+    fontSize: 8,
     color: colors.textSecondary,
   },
   currencyDropdown: {
     position: 'absolute',
-    top: 52,
+    top: 46,
     left: 0,
     width: 130,
     backgroundColor: colors.surface,
@@ -1157,7 +1110,7 @@ const styles = StyleSheet.create({
   },
   currencyOption: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
@@ -1165,7 +1118,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(44, 95, 94, 0.08)',
   },
   currencyOptionText: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: colors.textPrimary,
   },
   currencyOptionTextActive: {
@@ -1180,19 +1133,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.input,
-    paddingHorizontal: spacing.md,
-    height: 48,
+    paddingHorizontal: spacing.sm,
+    height: 42,
   },
   amountPrefixSymbol: {
-    fontSize: 18,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textSecondary,
     marginRight: spacing.xs,
   },
   amountInput: {
     flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
+    fontFamily: fontFamily.semiBold,
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.textPrimary,
     paddingVertical: 0,
   },
@@ -1211,8 +1166,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.full,
-    paddingVertical: 7,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
   categoryPillActive: {
     backgroundColor: colors.primary,
@@ -1222,12 +1177,13 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   categoryPillIcon: {
-    width: 14,
-    height: 14,
-    marginRight: 6,
+    width: 13,
+    height: 13,
+    marginRight: 5,
   },
   categoryPillText: {
-    fontSize: 13,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 11.5,
     fontWeight: '500',
     color: colors.textPrimary,
   },
@@ -1242,15 +1198,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.full,
-    paddingVertical: 6,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
   },
   travelerPillActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
   travelerPillText: {
-    fontSize: 12,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 11.5,
     fontWeight: '500',
     color: colors.textPrimary,
   },
@@ -1266,18 +1223,22 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.input,
     padding: spacing.sm,
-    fontSize: 14,
+    fontFamily: typography.body.fontFamily,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.textPrimary,
-    minHeight: 80,
+    minHeight: 70,
   },
 
   // Live Preview Card
   previewSectionHeader: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textMuted,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 11,
+    fontWeight: '600',
     letterSpacing: 0.8,
-    marginBottom: spacing.xs,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+    marginBottom: 6,
   },
   previewCard: {
     flexDirection: 'row',
@@ -1286,8 +1247,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.card,
-    padding: spacing.md,
+    borderRadius: 12,
+    padding: 12,
     ...shadows.card,
   },
   previewCardLeft: {
@@ -1297,74 +1258,80 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   previewIconBox: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     borderRadius: radius.input,
     backgroundColor: 'rgba(44, 95, 94, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
+    marginRight: spacing.sm + 2,
   },
   previewCategoryIcon: {
-    width: 20,
-    height: 20,
+    width: 17,
+    height: 17,
   },
   previewTextGroup: {
     flex: 1,
   },
   previewTitle: {
-    fontSize: 15,
+    fontFamily: typography.cardTitle.fontFamily,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textPrimary,
   },
   previewSubtitle: {
-    fontSize: 12,
+    fontFamily: typography.caption.fontFamily,
+    fontSize: 11.5,
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 1,
   },
   previewRight: {
     alignItems: 'flex-end',
   },
   previewAmount: {
-    fontSize: 16,
+    fontFamily: fontFamily.semiBold,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.primary,
   },
 
   // Actions
   actionsSection: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm + 2,
     gap: spacing.sm,
   },
   primarySubmitButton: {
+    height: 44,
     backgroundColor: colors.primary,
     borderRadius: radius.button,
-    paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
     ...shadows.sheet,
   },
   primarySubmitButtonText: {
-    fontSize: 16,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.textOnPrimary,
     letterSpacing: -0.2,
   },
   cancelButton: {
+    height: 40,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.button,
-    paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   cancelButtonText: {
-    fontSize: 15,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 13,
     fontWeight: '500',
     color: colors.textSecondary,
   },
   deleteFormButton: {
+    height: 40,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1373,17 +1340,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(176, 74, 74, 0.20)',
     borderRadius: radius.button,
-    paddingVertical: 12,
     marginTop: spacing.xs,
   },
   deleteFormButtonText: {
-    fontSize: 15,
+    fontFamily: typography.label.fontFamily,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.destructive,
   },
   deleteButtonIcon: {
-    width: 16,
-    height: 16,
+    width: 14,
+    height: 14,
   },
 
   // Delete Confirm Dialog

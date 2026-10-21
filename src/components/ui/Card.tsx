@@ -115,7 +115,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
-    padding: spacing.xl, // 20px internal padding per spec
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
   },
 
   // --- Variants ---

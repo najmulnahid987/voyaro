@@ -72,7 +72,7 @@ export function TabBarItem({
       accessibilityState={{ selected: false }}
       accessibilityLabel={label}
       accessibilityHint={`Switches to ${label} tab`}
-      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
     >
       <Image
         source={iconSource}
@@ -88,32 +88,32 @@ export function TabBarItem({
 
 const styles = StyleSheet.create({
   inactiveContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
   },
   inactiveIcon: {
-    width: 22,
-    height: 22,
+    width: 17,
+    height: 17,
   },
   activeContainer: {
-    height: 40,
-    paddingHorizontal: 14,
+    height: 32,
+    paddingHorizontal: 9,
     borderRadius: radius.full,
     backgroundColor: colors.primarySurface, // rgba(44, 95, 94, 0.10)
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   activeIcon: {
-    width: 20,
-    height: 20,
+    width: 15,
+    height: 15,
   },
   activeLabel: {
     fontFamily: 'Inter',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600',
     color: colors.primary,
     letterSpacing: -0.1,

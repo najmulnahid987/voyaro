@@ -94,14 +94,14 @@ export function AppTopBar({ onProfilePress, onSearchPress }: AppTopBarProps) {
 const styles = StyleSheet.create({
   floatingWrapper: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 12,
+    right: 12,
     zIndex: 50,
     alignItems: 'center',
   },
   container: {
     width: '100%',
-    maxWidth: 448, // matches max-w-md from HTML reference
+    maxWidth: 448, // matches max-w-md from design reference
     height: TOP_BAR_HEIGHT,
     backgroundColor: colors.surface,
     borderRadius: radius.full,
@@ -110,17 +110,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 8,
+    paddingHorizontal: 5,
     ...shadows.card,
     shadowColor: '#1a1c1c',
     shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowRadius: 10,
+    elevation: 3,
   },
   iconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.backgroundAlt,
     alignItems: 'center',
     justifyContent: 'center',
@@ -130,14 +130,14 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.94 }],
   },
   icon: {
-    width: 20,
-    height: 20,
+    width: 15,
+    height: 15,
   },
   brandTitle: {
     fontFamily: 'Inter',
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.primary,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
 });

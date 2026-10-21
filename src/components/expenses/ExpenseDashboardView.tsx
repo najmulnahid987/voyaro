@@ -264,6 +264,7 @@ export function ExpenseDashboardView({
                 {!isViewer && (
                   <Pressable
                     onPress={handleAddExpense}
+                    hitSlop={6}
                     style={({ pressed }) => [
                       styles.addIconButton,
                       pressed && styles.buttonPressed,
@@ -585,8 +586,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   addIconButton: {
-    width: 40,
-    height: 40,
+    width: 34,
+    height: 34,
     borderRadius: radius.full,
     backgroundColor: colors.primary,
     alignItems: 'center',
@@ -594,8 +595,8 @@ const styles = StyleSheet.create({
     ...shadows.card,
   },
   plusIcon: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
   },
   buttonPressed: {
     opacity: 0.8,
@@ -603,11 +604,12 @@ const styles = StyleSheet.create({
   },
   tripTitle: {
     fontFamily: typography.screenTitle.fontFamily,
-    fontSize: 24,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '700',
     color: colors.textPrimary,
-    letterSpacing: -0.5,
-    marginTop: 4,
+    letterSpacing: -0.3,
+    marginTop: 2,
   },
 
   // Trip Selector Dropdown

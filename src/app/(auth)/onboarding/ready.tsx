@@ -56,9 +56,9 @@ export default function ReadyScreen() {
           {/* Text Section */}
           <View style={styles.textSection}>
             <Text style={styles.stepLabel}>ONBOARDING COMPLETE</Text>
-            <Text style={styles.title}>You're ready to travel.</Text>
+            <Text style={styles.title}>{"You're ready to travel."}</Text>
             <Text style={styles.subtitle}>
-              Your profile is set. Let's start planning your next adventure.
+              {"Your profile is set. Let's start planning your next adventure."}
             </Text>
           </View>
         </View>

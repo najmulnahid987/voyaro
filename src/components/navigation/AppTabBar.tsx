@@ -116,14 +116,14 @@ export function AppTabBar({ state, descriptors, navigation }: AppTabBarProps) {
 const styles = StyleSheet.create({
   floatingWrapper: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 12,
+    right: 12,
     zIndex: 50,
     alignItems: 'center',
   },
   container: {
     width: '100%',
-    maxWidth: 448, // matches max-w-md from HTML reference
+    maxWidth: 448, // matches max-w-md from design reference
     height: BOTTOM_BAR_HEIGHT,
     backgroundColor: colors.surface,
     borderRadius: radius.full,
@@ -132,11 +132,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     ...shadows.card,
     shadowColor: '#1a1c1c',
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 6,
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
+    elevation: 4,
   },
 });

@@ -9,10 +9,10 @@ export const radius = {
   button: 8,
   /** 8px — Inputs (same as button) */
   input: 8,
-  /** 16px — Cards */
-  card: 16,
-  /** 24px — Modal / Bottom Sheet top radius */
-  sheet: 24,
+  /** 14px — Cards */
+  card: 14,
+  /** 20px — Modal / Bottom Sheet top radius */
+  sheet: 20,
   /** 9999px — Pills, Badges, Tags */
   full: 9999,
 } as const;
