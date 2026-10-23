@@ -18,6 +18,7 @@ import {
 import {
   DocumentFileInput,
   listTripDocuments,
+  listUniversalDocuments,
   uploadTripDocument,
   deleteTripDocument,
 } from '@/services/documentService';
@@ -26,15 +27,23 @@ import {
 // Types & Interfaces
 // ---------------------------------------------------------------------------
 
+export const ALL_TRIPS_SCOPE_ID = 'all_trips';
+
 export interface UploadDocumentOptions {
   file: DocumentFileInput;
   title: string;
   category: DocumentCategory;
+  isForAllTrips?: boolean;
 }
 
 export type UploadDocumentFn = {
   (options: UploadDocumentOptions): Promise<TripDocument>;
-  (file: DocumentFileInput, title: string, category: DocumentCategory): Promise<TripDocument>;
+  (
+    file: DocumentFileInput,
+    title: string,
+    category: DocumentCategory,
+    isForAllTrips?: boolean
+  ): Promise<TripDocument>;
 };
 
 export interface UseTripDocumentsResult {
@@ -83,9 +92,18 @@ export interface UseTripDocumentsResult {
 /**
  * Custom React hook for managing travel documents belonging to a trip.
  *
- * @param tripId The unique identifier of the active trip (UUID).
+ * @param tripId The unique identifier of the active trip (UUID) or ALL_TRIPS_SCOPE_ID.
+ * @param fallbackTripId Optional fallback trip ID when uploading while in universal scope.
  */
-export function useTripDocuments(tripId?: string): UseTripDocumentsResult {
+export function useTripDocuments(tripId?: string): UseTripDocumentsResult;
+export function useTripDocuments(
+  tripId?: string,
+  fallbackTripId?: string
+): UseTripDocumentsResult;
+export function useTripDocuments(
+  tripId?: string,
+  fallbackTripId?: string
+): UseTripDocumentsResult {
   const [documents, setDocuments] = useState<TripDocument[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(Boolean(tripId));
   const [error, setError] = useState<string | null>(null);
@@ -119,12 +137,30 @@ export function useTripDocuments(tripId?: string): UseTripDocumentsResult {
           setError(null);
         }
         return;
-      }
-
-      const currentTripId = tripId.trim();
+      }      const currentTripId = tripId.trim();
 
       try {
-        const data = await listTripDocuments(currentTripId);
+        let data: TripDocument[] = [];
+        if (currentTripId === ALL_TRIPS_SCOPE_ID) {
+          data = await listUniversalDocuments();
+        } else {
+          const [tripData, universalData] = await Promise.all([
+            listTripDocuments(currentTripId),
+            listUniversalDocuments().catch(() => []),
+          ]);
+          const combined = [...tripData];
+          const existingIds = new Set(tripData.map((d) => d.id));
+          for (const uDoc of universalData) {
+            if (!existingIds.has(uDoc.id)) {
+              combined.push(uDoc);
+            }
+          }
+          combined.sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+          data = combined;
+        }
+
         if (isCurrent && mountedRef.current) {
           setDocuments(data);
           setError(null);
@@ -168,7 +204,27 @@ export function useTripDocuments(tripId?: string): UseTripDocumentsResult {
     }
 
     try {
-      const fetched = await listTripDocuments(currentTripId);
+      let fetched: TripDocument[] = [];
+      if (currentTripId === ALL_TRIPS_SCOPE_ID) {
+        fetched = await listUniversalDocuments();
+      } else {
+        const [tripData, universalData] = await Promise.all([
+          listTripDocuments(currentTripId),
+          listUniversalDocuments().catch(() => []),
+        ]);
+        const combined = [...tripData];
+        const existingIds = new Set(tripData.map((d) => d.id));
+        for (const uDoc of universalData) {
+          if (!existingIds.has(uDoc.id)) {
+            combined.push(uDoc);
+          }
+        }
+        combined.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        fetched = combined;
+      }
+
       if (mountedRef.current) {
         setDocuments(fetched);
         setError(null);
@@ -195,23 +251,32 @@ export function useTripDocuments(tripId?: string): UseTripDocumentsResult {
     async (
       optionsOrFile: UploadDocumentOptions | DocumentFileInput,
       titleArg?: string,
-      categoryArg?: DocumentCategory
+      categoryArg?: DocumentCategory,
+      isForAllTripsArg?: boolean
     ): Promise<TripDocument> => {
       if (!tripId || typeof tripId !== 'string' || !tripId.trim()) {
         throw new Error('Cannot upload document: No active trip ID provided.');
       }
 
-      const file = 'file' in optionsOrFile && 'title' in optionsOrFile
-        ? (optionsOrFile as UploadDocumentOptions).file
-        : (optionsOrFile as DocumentFileInput);
+      const file =
+        'file' in optionsOrFile && 'title' in optionsOrFile
+          ? (optionsOrFile as UploadDocumentOptions).file
+          : (optionsOrFile as DocumentFileInput);
 
-      const title = 'title' in optionsOrFile
-        ? (optionsOrFile as UploadDocumentOptions).title
-        : titleArg!;
+      const title =
+        'title' in optionsOrFile
+          ? (optionsOrFile as UploadDocumentOptions).title
+          : titleArg!;
 
-      const category = 'category' in optionsOrFile
-        ? (optionsOrFile as UploadDocumentOptions).category
-        : categoryArg!;
+      const category =
+        'category' in optionsOrFile
+          ? (optionsOrFile as UploadDocumentOptions).category
+          : categoryArg!;
+
+      const isForAllTrips =
+        'isForAllTrips' in optionsOrFile
+          ? (optionsOrFile as UploadDocumentOptions).isForAllTrips
+          : isForAllTripsArg;
 
       // Concurrency lock: prevent duplicate simultaneous uploads
       if (isUploadingRef.current) {
@@ -223,17 +288,32 @@ export function useTripDocuments(tripId?: string): UseTripDocumentsResult {
         setIsUploading(true);
       }
 
+      const isAllTripsScope = tripId.trim() === ALL_TRIPS_SCOPE_ID;
+      const uploadTripId = isAllTripsScope
+        ? (fallbackTripId?.trim() || '')
+        : tripId.trim();
+
+      if (!uploadTripId) {
+        throw new Error(
+          'Cannot upload document: A valid trip is required to attach the document.'
+        );
+      }
+
       try {
         const createdDoc = await uploadTripDocument({
-          tripId: tripId.trim(),
+          tripId: uploadTripId,
           file,
           title,
           category,
+          isForAllTrips: isAllTripsScope ? true : isForAllTrips,
         });
 
         // Add the newly created document to the top of the list
         if (mountedRef.current) {
-          setDocuments((prev) => [createdDoc, ...prev.filter((d) => d.id !== createdDoc.id)]);
+          setDocuments((prev) => [
+            createdDoc,
+            ...prev.filter((d) => d.id !== createdDoc.id),
+          ]);
           setError(null);
         }
 
@@ -252,7 +332,7 @@ export function useTripDocuments(tripId?: string): UseTripDocumentsResult {
       }
     },
     [tripId]
-  ) as UploadDocumentFn;
+  );
 
   // -------------------------------------------------------------------------
   // 4. Delete Document

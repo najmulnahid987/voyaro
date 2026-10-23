@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,7 +39,39 @@ export default function ProfileScreen() {
     return pace.charAt(0).toUpperCase() + pace.slice(1) + ' Pace';
   };
 
+  const performLogout = async () => {
+    setLoggingOut(true);
+    try {
+      // 1. Pre-emptively transition route to avoid unmount collision with Stack.Protected
+      router.replace('/(auth)/welcome');
+      // 2. Perform session termination and cache clearing
+      await logout();
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to log out.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Error', msg);
+      }
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   const handleLogout = () => {
+    if (loggingOut) return;
+
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm('Are you sure you want to log out of your Voyaro account?')
+          : true;
+      if (confirmed) {
+        performLogout();
+      }
+      return;
+    }
+
     Alert.alert(
       'Log Out',
       'Are you sure you want to log out of your Voyaro account?',
@@ -47,17 +80,7 @@ export default function ProfileScreen() {
         {
           text: 'Log Out',
           style: 'destructive',
-          onPress: async () => {
-            setLoggingOut(true);
-            try {
-              await logout();
-              router.replace('/(auth)/welcome');
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to log out.');
-            } finally {
-              setLoggingOut(false);
-            }
-          },
+          onPress: performLogout,
         },
       ]
     );

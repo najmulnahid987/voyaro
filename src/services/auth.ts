@@ -82,6 +82,7 @@ let state: AuthState = {
 
 type AuthListener = (state: AuthState) => void;
 const listeners = new Set<AuthListener>();
+let initPromise: Promise<AuthState> | null = null;
 
 function notifyListeners() {
   const currentSnapshot = { ...state };
@@ -463,10 +464,16 @@ export async function completeOnboarding(): Promise<AuthResult> {
  * Sign out of Supabase and clear session from local device storage.
  */
 export async function logout(): Promise<AuthResult> {
+  initPromise = null;
+
   try {
-    await supabase.auth.signOut();
+    // Attempt Supabase signOut with a 3s timeout to avoid blocking offline / slow networks
+    await Promise.race([
+      supabase.auth.signOut(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SignOut timeout')), 3000)),
+    ]);
   } catch (err) {
-    console.warn('[Voyaro Auth] Exception during Supabase signOut:', err);
+    console.warn('[Voyaro Auth] Exception or timeout during Supabase signOut:', err);
   }
 
   state = {
@@ -477,6 +484,7 @@ export async function logout(): Promise<AuthResult> {
     isLoading: false,
   };
 
+  initPromise = null;
   notifyListeners();
   return { success: true };
 }
@@ -818,7 +826,6 @@ export const loginWithGoogle = signInWithGoogle;
 // 7. Session Restoration & Auth Lifecycle Management
 // ---------------------------------------------------------------------------
 
-let initPromise: Promise<AuthState> | null = null;
 let authSubscription: { unsubscribe: () => void } | null = null;
 let linkingSubscription: { remove: () => void } | null = null;
 
@@ -936,6 +943,7 @@ export function initAuth(): Promise<AuthState> {
             };
             notifyListeners();
           } else if (event === 'SIGNED_OUT') {
+            initPromise = null;
             state = {
               authenticated: false,
               user: null,

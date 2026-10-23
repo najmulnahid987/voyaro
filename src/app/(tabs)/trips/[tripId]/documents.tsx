@@ -42,6 +42,8 @@ import {
 import {
   DocumentFileInput,
   getTripDocumentSignedUrl,
+  getUserDocumentCount,
+  MAX_FREE_ACCOUNT_DOCUMENTS,
 } from '@/services/documentService';
 import { useTripDocuments } from '@/hooks/useTripDocuments';
 import {
@@ -139,9 +141,28 @@ export default function TripDocumentsScreen() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = subscribeToDocumentUploadRequest((targetTripId) => {
+    const unsubscribe = subscribeToDocumentUploadRequest(async (targetTripId) => {
       if (targetTripId && targetTripId !== effectiveTripId) return;
       if (canUpload) {
+        try {
+          const count = await getUserDocumentCount();
+          if (count >= MAX_FREE_ACCOUNT_DOCUMENTS) {
+            Alert.alert(
+              'Document Limit Reached',
+              `Free accounts can store up to ${MAX_FREE_ACCOUNT_DOCUMENTS} documents. Upgrade to Voyaro Pro for unlimited documents and premium features.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'View Plans',
+                  onPress: () => router.push('/(tabs)/profile/subscription'),
+                },
+              ]
+            );
+            return;
+          }
+        } catch {
+          // Ignore count error and let upload proceed
+        }
         setIsUploadModalOpen(true);
       } else {
         Alert.alert(
@@ -156,16 +177,17 @@ export default function TripDocumentsScreen() {
   const handleUpload = async (
     file: DocumentFileInput,
     title: string,
-    category: DocumentCategory
+    category: DocumentCategory,
+    isForAllTrips?: boolean
   ) => {
-    await uploadDocument(file, title, category);
+    await uploadDocument(file, title, category, isForAllTrips);
   };
 
   // ── 5. Secure Document Viewing ─────────────────────────────────────────────
   const [viewingDocId, setViewingDocId] = useState<string | null>(null);
 
   const handleViewDocument = async (doc: TripDocument) => {
-    if (doc.tripId !== effectiveTripId) {
+    if (doc.tripId !== effectiveTripId && !doc.isForAllTrips) {
       Alert.alert(
         'Access Denied',
         'This document does not belong to the active trip.'
@@ -176,7 +198,7 @@ export default function TripDocumentsScreen() {
     setViewingDocId(doc.id);
     try {
       const signedUrl = await getTripDocumentSignedUrl(doc.filePath, {
-        tripId: effectiveTripId,
+        tripId: doc.tripId,
         expiresIn: 3600,
       });
 

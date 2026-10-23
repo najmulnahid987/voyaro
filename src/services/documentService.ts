@@ -20,6 +20,7 @@ import { TripDocumentRow } from '@/types/database.types';
 import {
   mapDocumentRowToDomain,
   mapDocumentInputToInsert,
+  ALL_TRIPS_PREFIX,
 } from './mappers';
 import { isDevMockTrip } from './mockData';
 
@@ -91,6 +92,7 @@ export interface UploadTripDocumentParams {
   file: DocumentFileInput;
   title: string;
   category: DocumentCategory;
+  isForAllTrips?: boolean;
 }
 
 export interface GetSignedUrlOptions {
@@ -288,6 +290,63 @@ export async function listTripDocuments(tripId: string): Promise<TripDocument[]>
 }
 
 /**
+ * Maximum documents permitted for free user accounts.
+ */
+export const MAX_FREE_ACCOUNT_DOCUMENTS = 5;
+
+/**
+ * Counts total documents stored by the current user across all trips.
+ */
+export async function getUserDocumentCount(): Promise<number> {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return 0;
+    }
+    const { count, error } = await supabase
+      .from('trip_documents')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.warn('[Voyaro DocumentService] Error fetching user document count:', error.message);
+      return 0;
+    }
+    return count ?? 0;
+  } catch (err) {
+    console.warn('[Voyaro DocumentService] Exception fetching user document count:', err);
+    return 0;
+  }
+}
+
+/**
+ * Lists all documents marked universally for all trips owned by the current user.
+ */
+export async function listUniversalDocuments(): Promise<TripDocument[]> {
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return [];
+    }
+    const { data, error } = await supabase
+      .from('trip_documents')
+      .select('*')
+      .eq('user_id', user.id)
+      .like('title', `${ALL_TRIPS_PREFIX}%`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('[Voyaro DocumentService] Error listing universal documents:', error.message);
+      return [];
+    }
+    return (data || []).map((row: TripDocumentRow) => mapDocumentRowToDomain(row));
+  } catch (err) {
+    console.warn('[Voyaro DocumentService] Exception listing universal documents:', err);
+    return [];
+  }
+}
+
+/**
  * Uploads a document to private Supabase Storage and records its metadata in `trip_documents`.
  *
  * Guarantees:
@@ -300,7 +359,8 @@ export async function uploadTripDocument(
   paramsOrTripId: UploadTripDocumentParams | string,
   fileArg?: DocumentFileInput,
   titleArg?: string,
-  categoryArg?: DocumentCategory
+  categoryArg?: DocumentCategory,
+  isForAllTripsArg?: boolean
 ): Promise<TripDocument> {
   const params: UploadTripDocumentParams =
     typeof paramsOrTripId === 'string'
@@ -309,6 +369,7 @@ export async function uploadTripDocument(
           file: fileArg!,
           title: titleArg!,
           category: categoryArg!,
+          isForAllTrips: isForAllTripsArg,
         }
       : paramsOrTripId;
 
@@ -316,6 +377,14 @@ export async function uploadTripDocument(
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
     throw new Error('You must be signed in to upload travel documents.');
+  }
+
+  // 1b. Enforce Account Limit (5 documents maximum on free tier)
+  const currentCount = await getUserDocumentCount();
+  if (currentCount >= MAX_FREE_ACCOUNT_DOCUMENTS) {
+    throw new Error(
+      `Document limit reached (${currentCount}/${MAX_FREE_ACCOUNT_DOCUMENTS}). You can add a total of 5 documents from one account. Upgrade to Voyaro Pro for unlimited documents.`
+    );
   }
 
   // 2. Validate Inputs
@@ -363,6 +432,7 @@ export async function uploadTripDocument(
       fileName: cleanFileName,
       fileSize: params.file.size,
       mimeType: cleanMimeType,
+      isForAllTrips: params.isForAllTrips,
     },
     user.id
   );

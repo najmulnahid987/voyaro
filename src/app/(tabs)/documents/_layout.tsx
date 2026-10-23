@@ -1,11 +1,11 @@
 import { Stack } from 'expo-router';
 
 /**
- * Expenses tab layout.
+ * Documents tab layout.
  * Nested Stack inside the (tabs) Tabs navigator.
- * Handles navigation within the Expenses tab: overview → detail.
+ * Handles navigation within the Documents tab.
  */
-export default function ExpensesLayout() {
+export default function DocumentsLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />

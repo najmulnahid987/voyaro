@@ -11,6 +11,7 @@ import React, {
   useEffect,
   useState,
   useMemo,
+  useCallback,
   PropsWithChildren,
 } from 'react';
 import {
@@ -40,6 +41,7 @@ import {
 import { clearTripsCache } from './trip';
 import { clearItineraryCache } from './itineraryStore';
 import { clearExpenseCache } from './expenseStore';
+import { clearRouteCache } from './routing/routeService';
 
 export interface AuthContextValue extends AuthState {
   profile: DomainProfile | null;
@@ -67,10 +69,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (!isMounted) return;
       setAuthState(nextState);
       if (!nextState.authenticated) {
+        setProfile(null);
         clearProfileCache();
         clearTripsCache();
         clearItineraryCache();
         clearExpenseCache();
+        clearRouteCache();
       }
     });
 
@@ -95,6 +99,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
+  const handleLogout = useCallback(async (): Promise<AuthResult> => {
+    const result = await logout();
+    setProfile(null);
+    clearProfileCache();
+    clearTripsCache();
+    clearItineraryCache();
+    clearExpenseCache();
+    clearRouteCache();
+    return result;
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       ...authState,
@@ -104,13 +119,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
       login,
       signup,
       loginWithGoogle,
-      logout,
+      logout: handleLogout,
       resetPassword,
       completeOnboarding,
       updateProfile,
       refreshProfile: getProfile,
     }),
-    [authState, profile]
+    [authState, profile, handleLogout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -12,7 +12,7 @@ import { AppTopBar, AppTabBar } from '@/components/navigation';
  * Architecture:
  * - Persistent floating Top Header (AppTopBar)
  * - Persistent floating Bottom Navigation (AppTabBar)
- * - Tabs Navigator: Home · Trips · [Add] · Expenses · Profile
+ * - Tabs Navigator: Home · Trips · [Add] · Documents · Profile
  *
  * Screen content scrolls underneath the floating navigation shell.
  * Tab states (including nested stacks like Trips -> [tripId]) are preserved.
@@ -52,11 +52,11 @@ export default function TabsLayout() {
           }}
         />
 
-        {/* ── Expenses ─────────────────────────────────────────────────────── */}
+        {/* ── Documents ─────────────────────────────────────────────────────── */}
         <Tabs.Screen
-          name="expenses"
+          name="documents"
           options={{
-            title: 'Expenses',
+            title: 'Documents',
           }}
         />
 

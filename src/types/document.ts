@@ -85,6 +85,10 @@ export interface TripDocument {
   mimeType: string;
   createdAt: string; // ISO 8601 timestamp
   updatedAt: string; // ISO 8601 timestamp
+  /**
+   * Whether this document applies universally across all trips.
+   */
+  isForAllTrips?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +107,7 @@ export interface DocumentUploadInput {
   fileSize: number;
   mimeType: string;
   userId?: string;
+  isForAllTrips?: boolean;
 }
 
 /**

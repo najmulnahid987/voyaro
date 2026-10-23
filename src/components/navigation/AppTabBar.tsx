@@ -13,7 +13,7 @@ export type AppTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>[
 const tabLabelMap: Record<string, string> = {
   index: 'Home',
   trips: 'Trips',
-  expenses: 'Expenses',
+  documents: 'Documents',
   profile: 'Profile',
 };
 
@@ -22,7 +22,7 @@ const tabLabelMap: Record<string, string> = {
  *
  * Source of truth: DESIGN.md & HTML reference
  * - Floating pill container with white surface and subtle border
- * - 5 slots: Home · Trips · [+] · Expenses · Profile
+ * - 5 slots: Home · Trips · [+] · Documents · Profile
  * - Inactive: icon only
  * - Active: tonal teal pill (bg-primary/10) with icon + label
  * - Center: prominent primary teal circle with plus icon (triggers /add)

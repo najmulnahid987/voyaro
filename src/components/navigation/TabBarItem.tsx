@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import { colors, radius } from '@/theme';
 
-export type TabKey = 'index' | 'trips' | 'expenses' | 'profile';
+export type TabKey = 'index' | 'trips' | 'documents' | 'profile';
 
 interface TabBarItemProps {
   tabKey: TabKey;
@@ -15,7 +15,7 @@ interface TabBarItemProps {
 const tabIcons: Record<TabKey, any> = {
   index: require('@/assets/images/tabIcons/home.png'),
   trips: require('@/assets/images/tabIcons/explore.png'),
-  expenses: require('@/assets/images/icons/receipt.svg'),
+  documents: require('@/assets/images/icons/document.svg'),
   profile: require('@/assets/images/onboarding/person.svg'),
 };
 

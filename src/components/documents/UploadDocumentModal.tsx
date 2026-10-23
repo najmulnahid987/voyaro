@@ -53,7 +53,8 @@ export interface UploadDocumentModalProps {
   onUpload: (
     file: DocumentFileInput,
     title: string,
-    category: DocumentCategory
+    category: DocumentCategory,
+    isForAllTrips?: boolean
   ) => Promise<TripDocument | void>;
   /**
    * Whether an upload is actively in progress.
@@ -63,6 +64,10 @@ export interface UploadDocumentModalProps {
    * Optional initial category to pre-select. Defaults to 'flights'.
    */
   initialCategory?: DocumentCategory;
+  /**
+   * Whether the document should default to applying to all trips.
+   */
+  initialIsForAllTrips?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -111,13 +116,21 @@ export function UploadDocumentModal({
   onUpload,
   isUploading: propIsUploading = false,
   initialCategory = 'flights',
+  initialIsForAllTrips = false,
 }: UploadDocumentModalProps) {
   const [selectedFile, setSelectedFile] = useState<DocumentFileInput | null>(null);
   const [title, setTitle] = useState<string>('');
   const [hasUserEditedTitle, setHasUserEditedTitle] = useState<boolean>(false);
   const [category, setCategory] = useState<DocumentCategory>(initialCategory);
+  const [isForAllTrips, setIsForAllTrips] = useState<boolean>(Boolean(initialIsForAllTrips));
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (visible) {
+      setIsForAllTrips(Boolean(initialIsForAllTrips));
+    }
+  }, [visible, initialIsForAllTrips]);
 
   const activeLoading = isSubmitting || propIsUploading;
 
@@ -214,11 +227,16 @@ export function UploadDocumentModal({
     setError(null);
 
     try {
-      await onUpload(selectedFile, trimmedTitle, category);
+      if (isForAllTrips) {
+        await onUpload(selectedFile, trimmedTitle, category, true);
+      } else {
+        await onUpload(selectedFile, trimmedTitle, category);
+      }
       // Reset form state on successful upload and dismiss
       setSelectedFile(null);
       setTitle('');
       setHasUserEditedTitle(false);
+      setIsForAllTrips(Boolean(initialIsForAllTrips));
       setError(null);
       onClose();
     } catch (err: unknown) {
@@ -404,6 +422,39 @@ export function UploadDocumentModal({
                   );
                 })}
               </View>
+            </View>
+
+            {/* ── Universal Document Toggle (for all trips) ──────────── */}
+            <View style={styles.fieldSection}>
+              <Pressable
+                style={styles.allTripsToggleCard}
+                onPress={() => {
+                  if (!activeLoading) setIsForAllTrips((prev) => !prev);
+                }}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isForAllTrips }}
+                accessibilityLabel="Set for all trips"
+              >
+                <View
+                  style={[
+                    styles.checkboxBox,
+                    isForAllTrips && styles.checkboxBoxChecked,
+                  ]}
+                >
+                  {isForAllTrips && <Text style={styles.checkmarkText}>✓</Text>}
+                </View>
+                <View style={styles.allTripsTextContainer}>
+                  <View style={styles.allTripsHeaderRow}>
+                    <Text style={styles.allTripsTitle}>Set for all trips</Text>
+                    <View style={styles.allTripsBadge}>
+                      <Text style={styles.allTripsBadgeText}>*(for all trips)</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.allTripsDescription}>
+                    Make this document accessible in every trip (e.g. Passport, Insurance, ID)
+                  </Text>
+                </View>
+              </Pressable>
             </View>
           </ScrollView>
 
@@ -685,5 +736,68 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.semiBold,
     fontSize: 13,
     color: colors.textOnPrimary,
+  },
+  allTripsToggleCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    borderRadius: radius.card,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: colors.textMuted,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  checkboxBoxChecked: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  checkmarkText: {
+    color: colors.textOnPrimary,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 14,
+  },
+  allTripsTextContainer: {
+    flex: 1,
+  },
+  allTripsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  allTripsTitle: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 13,
+    color: colors.textPrimary,
+  },
+  allTripsBadge: {
+    backgroundColor: colors.primarySurface,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.button,
+  },
+  allTripsBadgeText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 10,
+    color: colors.primary,
+  },
+  allTripsDescription: {
+    fontFamily: fontFamily.regular,
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 3,
+    lineHeight: 15,
   },
 });

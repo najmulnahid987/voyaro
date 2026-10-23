@@ -525,12 +525,20 @@ export function mapTripInvitationToInsert(
 // 7. Document Mappers (Phase 12)
 // ---------------------------------------------------------------------------
 
+export const ALL_TRIPS_PREFIX = '[All Trips] ';
+
 export function mapDocumentRowToDomain(row: TripDocumentRow): TripDocument {
+  const isForAllTrips = typeof row.title === 'string' && row.title.startsWith(ALL_TRIPS_PREFIX);
+  const cleanTitle = isForAllTrips
+    ? row.title.slice(ALL_TRIPS_PREFIX.length).trim()
+    : row.title;
+
   return {
     id: row.id,
     tripId: row.trip_id,
     userId: row.user_id,
-    title: row.title,
+    title: cleanTitle,
+    isForAllTrips,
     category: row.category as DocumentCategory,
     filePath: row.file_path,
     fileName: row.file_name,
@@ -550,10 +558,14 @@ export function mapDocumentInputToInsert(
     throw new Error('User ID is required to insert a trip document.');
   }
 
+  const rawTitle = input.isForAllTrips && !input.title.startsWith(ALL_TRIPS_PREFIX)
+    ? `${ALL_TRIPS_PREFIX}${input.title.trim()}`
+    : input.title.trim();
+
   return {
     trip_id: input.tripId,
     user_id: effectiveUserId,
-    title: input.title.trim(),
+    title: rawTitle,
     category: input.category,
     file_path: input.filePath,
     file_name: input.fileName,

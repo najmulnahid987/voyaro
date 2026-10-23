@@ -165,7 +165,14 @@ export function DocumentCard({
             />
           </View>
           <View style={styles.badgeTextWrapper}>
-            <Text style={styles.categoryLabel}>{categoryMeta.label}</Text>
+            <View style={styles.categoryTitleRow}>
+              <Text style={styles.categoryLabel}>{categoryMeta.label}</Text>
+              {document.isForAllTrips && (
+                <View style={styles.allTripsBadge}>
+                  <Text style={styles.allTripsBadgeText}>*(for all trips)</Text>
+                </View>
+              )}
+            </View>
             {formattedDate ? (
               <Text style={styles.uploadDateText}>{formattedDate}</Text>
             ) : null}
@@ -287,12 +294,30 @@ const styles = StyleSheet.create({
   },
   badgeTextWrapper: {
     justifyContent: 'center',
+    flex: 1,
+  },
+  categoryTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
   },
   categoryLabel: {
     fontFamily: fontFamily.semiBold,
     fontSize: 12,
     color: colors.primary,
     letterSpacing: 0.2,
+  },
+  allTripsBadge: {
+    backgroundColor: colors.primarySurface,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.button,
+  },
+  allTripsBadgeText: {
+    fontFamily: fontFamily.semiBold,
+    fontSize: 10,
+    color: colors.primary,
   },
   uploadDateText: {
     fontFamily: fontFamily.regular,

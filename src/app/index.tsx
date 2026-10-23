@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, spacing, typography } from '@/theme';
-import { initAuth } from '@/services/auth';
+import { initAuth, getAuthState } from '@/services/auth';
 
 /**
  * Route: /
@@ -44,7 +44,10 @@ export default function SplashScreen() {
 
     // 2. Restore session and navigate
     async function resolveInitialRoute() {
-      const minDisplayTimer = new Promise((resolve) => setTimeout(resolve, 1200));
+      const isInitialLoading = getAuthState().isLoading;
+      const minDisplayTimer = isInitialLoading
+        ? new Promise((resolve) => setTimeout(resolve, 1200))
+        : Promise.resolve();
       const [auth] = await Promise.all([initAuth(), minDisplayTimer]);
 
       if (!isMounted) return;

@@ -52,29 +52,47 @@ export default function PrivacyScreen() {
     }, 3500);
   };
 
+  const performClearCache = () => {
+    setClearingCache(true);
+    try {
+      clearTripsCache();
+      clearItineraryCache();
+      clearExpenseCache();
+      setCacheSize('0.0 MB');
+      showFeedback('Offline travel cache cleared successfully.');
+    } catch (err: any) {
+      const msg = err.message || 'Failed to clear cache.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Error', msg);
+      }
+    } finally {
+      setClearingCache(false);
+    }
+  };
+
   const handleClearCache = async () => {
+    if (clearingCache) return;
+    const msg = 'This will delete cached offline maps, places, and itinerary previews. Your saved cloud data is completely safe.';
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(msg)
+          : true;
+      if (confirmed) performClearCache();
+      return;
+    }
+
     Alert.alert(
       'Clear Travel Cache',
-      'This will delete cached offline maps, places, and itinerary previews. Your saved cloud data is completely safe.',
+      msg,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear Cache',
           style: 'destructive',
-          onPress: async () => {
-            setClearingCache(true);
-            try {
-              clearTripsCache();
-              clearItineraryCache();
-              clearExpenseCache();
-              setCacheSize('0.0 MB');
-              showFeedback('Offline travel cache cleared successfully.');
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to clear cache.');
-            } finally {
-              setClearingCache(false);
-            }
-          },
+          onPress: performClearCache,
         },
       ]
     );
@@ -83,7 +101,37 @@ export default function PrivacyScreen() {
   const handlePasswordReset = async () => {
     const targetEmail = user?.email || profile?.email;
     if (!targetEmail) {
-      Alert.alert('Notice', 'No associated email address found for this account.');
+      if (Platform.OS === 'web') {
+        window.alert('No associated email address found for this account.');
+      } else {
+        Alert.alert('Notice', 'No associated email address found for this account.');
+      }
+      return;
+    }
+
+    const performReset = async () => {
+      setSendingReset(true);
+      try {
+        await resetPassword(targetEmail);
+        showFeedback(`Password reset link sent to ${targetEmail}`);
+      } catch (err: any) {
+        const msg = err.message || 'Failed to send reset link.';
+        if (Platform.OS === 'web') {
+          window.alert(msg);
+        } else {
+          Alert.alert('Error', msg);
+        }
+      } finally {
+        setSendingReset(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(`Send a secure password reset link to ${targetEmail}?`)
+          : true;
+      if (confirmed) performReset();
       return;
     }
 
@@ -94,17 +142,7 @@ export default function PrivacyScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Send Link',
-          onPress: async () => {
-            setSendingReset(true);
-            try {
-              await resetPassword(targetEmail);
-              showFeedback(`Password reset link sent to ${targetEmail}`);
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to send reset link.');
-            } finally {
-              setSendingReset(false);
-            }
-          },
+          onPress: performReset,
         },
       ]
     );
@@ -118,23 +156,41 @@ export default function PrivacyScreen() {
     }, 1200);
   };
 
+  const performDeleteAccount = async () => {
+    try {
+      router.replace('/(auth)/welcome');
+      await logout();
+    } catch (err: any) {
+      const msg = err.message || 'Failed to delete account.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Error', msg);
+      }
+    }
+  };
+
   const handleDeleteAccount = () => {
+    const msg =
+      'Are you sure you want to permanently delete your Voyaro account and all associated trip itineraries? This action cannot be undone.';
+    if (Platform.OS === 'web') {
+      const confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(msg)
+          : true;
+      if (confirmed) performDeleteAccount();
+      return;
+    }
+
     Alert.alert(
       'Delete Account',
-      'Are you sure you want to permanently delete your Voyaro account and all associated trip itineraries? This action cannot be undone.',
+      msg,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete Forever',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              router.replace('/(auth)/welcome');
-            } catch (err: any) {
-              Alert.alert('Error', err.message || 'Failed to delete account.');
-            }
-          },
+          onPress: performDeleteAccount,
         },
       ]
     );
